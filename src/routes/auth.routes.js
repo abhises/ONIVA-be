@@ -18,7 +18,7 @@ router.post('/register', asyncHandler(async (req, res) => {
     throw new AppError('Phone, full name, and password are required', 400);
   }
 
-  if (!/^\+?[0-9]{9,15}$/.test(phone.replace(/\s+/g, ''))) {
+  if (!/^\+?[0-9]{9,10}$/.test(phone.replace(/\s+/g, ''))) {
     throw new AppError('Invalid phone number format', 400);
   }
 
@@ -26,7 +26,7 @@ router.post('/register', asyncHandler(async (req, res) => {
     throw new AppError('Password must be at least 6 characters', 400);
   }
 
-  if (!['client', 'driver', 'admin'].includes(role)) {
+  if (!['client', 'driver'].includes(role)) {
     throw new AppError('Invalid user role', 400);
   }
 
