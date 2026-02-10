@@ -18,22 +18,60 @@ const logger = require('../utils/logger');
 router.use(authorize('admin'));
 
 // Dashboard metrics
-router.get('/dashboard', asyncHandler(async (req, res) => {
-  const result = await query(`
-    SELECT 
-      (SELECT COUNT(*) FROM users WHERE role = 'driver' AND status = 'active') as active_drivers,
-      (SELECT COUNT(*) FROM trips WHERE status = 'completed') as completed_trips,
-      (SELECT SUM(total_price) FROM trips WHERE status = 'completed') as total_revenue,
-      (SELECT SUM(platform_commission) FROM trips WHERE status = 'completed') as total_commission,
-      (SELECT COUNT(*) FROM trips WHERE DATE(created_at) = CURRENT_DATE) as todays_trips,
-      (SELECT SUM(total_price) FROM trips WHERE DATE(created_at) = CURRENT_DATE) as todays_revenue
-  `);
+router.get(
+  '/dashboard',
+  asyncHandler(async (req, res) => {
+    const result = await query(`
+      SELECT 
+        -- all users except admin
+        (SELECT COUNT(*) 
+         FROM users 
+         WHERE role != 'admin') AS totalUsers,
 
-  res.status(200).json({
-    success: true,
-    data: result.rows[0]
-  });
-}));
+        -- all drivers
+        (SELECT COUNT(*) 
+         FROM users 
+         WHERE role = 'driver') AS total_drivers,
+
+        -- active drivers
+        (SELECT COUNT(*) 
+         FROM users 
+         WHERE role = 'driver' 
+           AND status = 'active') AS active_drivers,
+
+        -- completed trips
+        (SELECT COUNT(*) 
+         FROM trips 
+         WHERE status = 'completed') AS completed_trips,
+
+        -- total revenue
+        (SELECT COALESCE(SUM(total_price), 0) 
+         FROM trips 
+         WHERE status = 'completed') AS total_revenue,
+
+        -- platform commission
+        (SELECT COALESCE(SUM(platform_commission), 0) 
+         FROM trips 
+         WHERE status = 'completed') AS total_commission,
+
+        -- today's trips
+        (SELECT COUNT(*) 
+         FROM trips 
+         WHERE DATE(created_at) = CURRENT_DATE) AS todays_trips,
+
+        -- today's revenue
+        (SELECT COALESCE(SUM(total_price), 0) 
+         FROM trips 
+         WHERE DATE(created_at) = CURRENT_DATE) AS todays_revenue
+    `)
+
+    res.status(200).json({
+      success: true,
+      data: result.rows[0],
+    })
+  })
+)
+
 
 // Get all drivers
 router.get('/drivers', asyncHandler(async (req, res) => {
