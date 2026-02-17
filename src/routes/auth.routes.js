@@ -9,6 +9,7 @@ const AuthService = require("../services/auth.service");
 const { asyncHandler, AppError } = require("../middleware/errorHandler");
 const { authenticate } = require("../middleware/auth");
 
+
 // Register a new user
 router.post(
   "/register",

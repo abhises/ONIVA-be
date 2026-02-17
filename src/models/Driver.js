@@ -3,8 +3,8 @@
  * Handles driver-specific data and operations
  */
 
-const { query, transaction } = require('../config/database');
-const logger = require('../utils/logger');
+const { query, transaction } = require("../config/database");
+const logger = require("../utils/logger");
 
 class Driver {
   static async create(driverId, driverData) {
@@ -14,7 +14,7 @@ class Driver {
       licenseExpiry,
       profilePhoto,
       region,
-      vehicleInfo
+      vehicleInfo,
     } = driverData;
 
     return transaction(async (client) => {
@@ -33,14 +33,14 @@ class Driver {
             profilePhoto,
             region,
             JSON.stringify(vehicleInfo),
-            'pending'
-          ]
+            "pending",
+          ],
         );
 
-        logger.info('Driver profile created', { driverId, status: 'pending' });
+        logger.info("Driver profile created", { driverId, status: "pending" });
         return result.rows[0];
       } catch (error) {
-        logger.error('Error creating driver profile:', error);
+        logger.error("Error creating driver profile:", error);
         throw error;
       }
     });
@@ -53,11 +53,11 @@ class Driver {
          FROM drivers d
          JOIN users u ON d.user_id = u.id
          WHERE d.user_id = $1`,
-        [driverId]
+        [driverId],
       );
       return result.rows[0] || null;
     } catch (error) {
-      logger.error('Error finding driver:', error);
+      logger.error("Error finding driver:", error);
       throw error;
     }
   }
@@ -71,11 +71,11 @@ class Driver {
          WHERE d.region = $1 AND d.verification_status = 'approved' AND u.status = 'active'
          ORDER BY d.rating DESC
          LIMIT $2 OFFSET $3`,
-        [region, limit, offset]
+        [region, limit, offset],
       );
       return result.rows;
     } catch (error) {
-      logger.error('Error fetching approved drivers:', error);
+      logger.error("Error fetching approved drivers:", error);
       throw error;
     }
   }
@@ -95,11 +95,11 @@ class Driver {
                  cos(radians(d.current_longitude) - radians($1)) + 
                  sin(radians($2)) * sin(radians(d.current_latitude)))) <= $4
          ORDER BY distance ASC`,
-        [longitude, latitude, region, maxDistance]
+        [longitude, latitude, region, maxDistance],
       );
       return result.rows;
     } catch (error) {
-      logger.error('Error fetching nearest drivers:', error);
+      logger.error("Error fetching nearest drivers:", error);
       throw error;
     }
   }
@@ -107,14 +107,17 @@ class Driver {
   static async updateVerificationStatus(driverId, status) {
     try {
       const result = await query(
-        `UPDATE drivers SET verification_status = $1, updated_at = NOW()
-         WHERE user_id = $2 RETURNING *`,
-        [status, driverId]
+        `UPDATE drivers 
+       SET verification_status = $1, updated_at = NOW()
+       WHERE id = $2 
+       RETURNING *`,
+        [status, driverId],
       );
-      logger.info('Driver verification status updated', { driverId, status });
+
+      logger.info("Driver verification status updated", { driverId, status });
       return result.rows[0] || null;
     } catch (error) {
-      logger.error('Error updating verification status:', error);
+      logger.error("Error updating verification status:", error);
       throw error;
     }
   }
@@ -126,11 +129,11 @@ class Driver {
          last_location_update = NOW(), updated_at = NOW()
          WHERE user_id = $1
          RETURNING user_id, current_latitude, current_longitude`,
-        [driverId, latitude, longitude]
+        [driverId, latitude, longitude],
       );
       return result.rows[0] || null;
     } catch (error) {
-      logger.error('Error updating driver location:', error);
+      logger.error("Error updating driver location:", error);
       throw error;
     }
   }
@@ -141,12 +144,12 @@ class Driver {
         `UPDATE drivers SET is_online = $1, updated_at = NOW()
          WHERE user_id = $2
          RETURNING user_id, is_online`,
-        [isOnline, driverId]
+        [isOnline, driverId],
       );
-      logger.info('Driver online status updated', { driverId, isOnline });
+      logger.info("Driver online status updated", { driverId, isOnline });
       return result.rows[0] || null;
     } catch (error) {
-      logger.error('Error updating online status:', error);
+      logger.error("Error updating online status:", error);
       throw error;
     }
   }
@@ -157,11 +160,11 @@ class Driver {
         `UPDATE drivers SET rating = $1, updated_at = NOW()
          WHERE user_id = $2
          RETURNING user_id, rating`,
-        [newRating, driverId]
+        [newRating, driverId],
       );
       return result.rows[0] || null;
     } catch (error) {
-      logger.error('Error updating driver rating:', error);
+      logger.error("Error updating driver rating:", error);
       throw error;
     }
   }
@@ -177,16 +180,18 @@ class Driver {
          FROM trips
          WHERE driver_id = $1 AND status = 'completed' 
          AND created_at BETWEEN $2 AND $3`,
-        [driverId, startDate, endDate]
+        [driverId, startDate, endDate],
       );
-      return result.rows[0] || {
-        total_trips: 0,
-        total_earnings: 0,
-        avg_earning_per_trip: 0,
-        total_commission_paid: 0
-      };
+      return (
+        result.rows[0] || {
+          total_trips: 0,
+          total_earnings: 0,
+          avg_earning_per_trip: 0,
+          total_commission_paid: 0,
+        }
+      );
     } catch (error) {
-      logger.error('Error fetching driver earnings:', error);
+      logger.error("Error fetching driver earnings:", error);
       throw error;
     }
   }
@@ -198,20 +203,20 @@ class Driver {
         await client.query(
           `UPDATE drivers SET verification_status = 'suspended', updated_at = NOW()
            WHERE user_id = $1`,
-          [driverId]
+          [driverId],
         );
 
         // Log suspension reason
         await client.query(
           `INSERT INTO driver_suspensions (driver_id, reason, created_at)
            VALUES ($1, $2, NOW())`,
-          [driverId, reason]
+          [driverId, reason],
         );
 
-        logger.info('Driver suspended', { driverId, reason });
+        logger.info("Driver suspended", { driverId, reason });
         return true;
       } catch (error) {
-        logger.error('Error suspending driver:', error);
+        logger.error("Error suspending driver:", error);
         throw error;
       }
     });
