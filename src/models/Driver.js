@@ -80,29 +80,37 @@ class Driver {
     }
   }
 
-  static async getNearestDrivers(latitude, longitude, region, maxDistance = 5) {
-    try {
-      const result = await query(
-        `SELECT d.*, u.phone, u.full_name,
-                (6371 * acos(cos(radians($2)) * cos(radians(d.current_latitude)) * 
-                 cos(radians(d.current_longitude) - radians($1)) + 
-                 sin(radians($2)) * sin(radians(d.current_latitude)))) AS distance
-         FROM drivers d
-         JOIN users u ON d.user_id = u.id
-         WHERE d.region = $3 AND d.verification_status = 'approved' AND d.is_online = true 
+ static async getNearestDrivers(latitude, longitude, region, maxDistance = 5) {
+  try {
+    const result = await query(
+      `SELECT d.*, u.phone, u.full_name,
+              (6371 * acos(
+                 cos(radians($2)) * cos(radians(d.current_latitude)) *
+                 cos(radians(d.current_longitude) - radians($1)) +
+                 sin(radians($2)) * sin(radians(d.current_latitude))
+              )) AS distance
+       FROM drivers d
+       JOIN users u ON d.user_id = u.id
+       WHERE d.region = $3
+         AND d.verification_status = 'approved'
+         AND d.is_online = true
          AND u.status = 'active'
-         HAVING (6371 * acos(cos(radians($2)) * cos(radians(d.current_latitude)) * 
-                 cos(radians(d.current_longitude) - radians($1)) + 
-                 sin(radians($2)) * sin(radians(d.current_latitude)))) <= $4
-         ORDER BY distance ASC`,
-        [longitude, latitude, region, maxDistance],
-      );
-      return result.rows;
-    } catch (error) {
-      logger.error("Error fetching nearest drivers:", error);
-      throw error;
-    }
+         AND (6371 * acos(
+               cos(radians($2)) * cos(radians(d.current_latitude)) *
+               cos(radians(d.current_longitude) - radians($1)) +
+               sin(radians($2)) * sin(radians(d.current_latitude))
+             )) <= $4
+       ORDER BY distance ASC`,
+      [longitude, latitude, region, maxDistance]
+    );
+
+    return result.rows;
+  } catch (error) {
+    logger.error("Error fetching nearest drivers:", error);
+    throw error;
   }
+}
+
 
   static async updateVerificationStatus(driverId, status) {
     try {

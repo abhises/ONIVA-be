@@ -379,18 +379,17 @@ router.get(
   "/reports/regional",
   asyncHandler(async (req, res) => {
     const result = await query(`
-    SELECT 
-      t.region,
-      COUNT(*) as trips,
-      SUM(t.total_price) as total_revenue,
-      SUM(t.platform_commission) as commission,
-      COUNT(DISTINCT d.user_id) as active_drivers
-    FROM trips t
-    LEFT JOIN drivers d ON t.driver_id = d.user_id
-    WHERE t.status = 'completed'
-    GROUP BY t.region
-    ORDER BY total_revenue DESC
-  `);
+      SELECT 
+        t.region,
+        COUNT(*) as trips,
+        SUM(t.total_price) as total_revenue,
+        SUM(t.platform_commission) as commission,
+        COUNT(DISTINCT t.driver_id) as active_drivers
+      FROM trips t
+      WHERE t.status = 'completed'
+      GROUP BY t.region
+      ORDER BY total_revenue DESC
+    `);
 
     res.status(200).json({
       success: true,
@@ -398,6 +397,7 @@ router.get(
     });
   }),
 );
+
 
 // User management
 router.get(
