@@ -286,20 +286,22 @@ router.get(
 );
 
 // Get pricing configuration
+// Get pricing configuration history
 router.get(
-  "/pricing",
+  "/pricing/history",
   asyncHandler(async (req, res) => {
-    const config = await PricingService.getPricingConfig();
+    const history = await PricingService.getPricingHistory();
 
     res.status(200).json({
       success: true,
-      data: config,
+      data: history,
     });
   }),
 );
 
-// Update pricing configuration
-router.put(
+// Create and activate a NEW pricing configuration
+// admin.js
+router.post(
   "/pricing",
   asyncHandler(async (req, res) => {
     const {
@@ -309,27 +311,48 @@ router.put(
       minimum_fare,
       night_surcharge_percentage,
       long_distance_coefficient,
+      hourly_rates // ADDED THIS
     } = req.body;
 
     if (!commission_percentage || !base_fare || !per_km_rate) {
       throw new AppError("Missing required pricing fields", 400);
     }
 
-    const updated = await PricingService.updatePricingConfig({
+    const newConfig = await PricingService.createPricingConfig({
       commission_percentage,
       base_fare,
       per_km_rate,
       minimum_fare,
       night_surcharge_percentage,
       long_distance_coefficient,
+      hourly_rates // ADDED THIS
     });
 
-    logger.info("Pricing updated by admin", { adminId: req.userId });
+    res.status(201).json({
+      success: true,
+      message: "New pricing configuration applied successfully",
+      data: newConfig,
+    });
+  }),
+);
+
+// Activate an older pricing configuration
+router.put(
+  "/pricing/:id/activate",
+  asyncHandler(async (req, res) => {
+    const configId = req.params.id;
+
+    const activatedConfig = await PricingService.activatePricingConfig(configId);
+
+    logger.info("Historical pricing config activated by admin", { 
+      adminId: req.userId,
+      configId 
+    });
 
     res.status(200).json({
       success: true,
-      message: "Pricing updated successfully",
-      data: updated,
+      message: "Historical pricing activated successfully",
+      data: activatedConfig,
     });
   }),
 );

@@ -19,6 +19,82 @@ class PricingService {
     }
   }
 
+  // 1. Create a new pricing config and make it the active one
+ // pricing.service.js
+  static async createPricingConfig(config) {
+    try {
+      const result = await query(
+        `WITH deactivate_all AS (
+           UPDATE pricing_config SET is_active = false RETURNING id
+         )
+         INSERT INTO pricing_config (
+           commission_percentage, 
+           base_fare, 
+           per_km_rate, 
+           minimum_fare,
+           night_surcharge_percentage, 
+           long_distance_coefficient,
+           hourly_rates, -- ADDED THIS
+           is_active
+         ) VALUES ($1, $2, $3, $4, $5, $6, $7, true) -- ADDED $7
+         RETURNING *`,
+        [
+          config.commission_percentage || 25,
+          config.base_fare || 3000,
+          config.per_km_rate || 300,
+          config.minimum_fare || 5000,
+          config.night_surcharge_percentage || 15,
+          config.long_distance_coefficient || 1.1,
+          config.hourly_rates || '{"1": 5000, "4": 18000, "8": 35000}' // ADDED THIS
+        ]
+      );
+
+      return result.rows[0];
+    } catch (error) {
+      throw error;
+    }
+  }
+
+  // 2. View all past and present pricing configs
+  static async getPricingHistory() {
+    try {
+      const result = await query(
+        `SELECT * FROM pricing_config ORDER BY created_at DESC`
+      );
+      return result.rows;
+    } catch (error) {
+      logger.error('Error fetching pricing history:', error);
+      throw error;
+    }
+  }
+
+  // 3. Activate a specific historical pricing config
+  static async activatePricingConfig(id) {
+    try {
+      // Deactivate all, then activate only the specified ID
+      const result = await query(
+        `WITH deactivate_all AS (
+           UPDATE pricing_config SET is_active = false RETURNING id
+         )
+         UPDATE pricing_config 
+         SET is_active = true, updated_at = NOW() 
+         WHERE id = $1 
+         RETURNING *`,
+        [id]
+      );
+
+      if (result.rows.length === 0) {
+        throw new Error('Pricing configuration not found');
+      }
+
+      logger.info(`Pricing config ID ${id} activated`);
+      return result.rows[0];
+    } catch (error) {
+      logger.error('Error activating pricing config:', error);
+      throw error;
+    }
+  }
+
   static getDefaultConfig() {
     return {
       commission_percentage: 25,
