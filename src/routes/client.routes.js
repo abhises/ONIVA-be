@@ -83,6 +83,17 @@ router.post('/estimate-fare', asyncHandler(async (req, res) => {
   });
 }));
 
+// Get active pricing configuration
+router.get('/pricing/active', asyncHandler(async (req, res) => {
+  // This calls the existing method in your PricingService
+  const activeConfig = await PricingService.getPricingConfig();
+
+  res.status(200).json({
+    success: true,
+    data: activeConfig
+  });
+}));
+
 // Book a trip
 router.post('/book-trip', asyncHandler(async (req, res) => {
   const {
