@@ -136,13 +136,13 @@ router.post('/requests/:requestId/reject', asyncHandler(async (req, res) => {
 }));
 
 // Get active trip
+// Get active trip for the logged-in driver
 router.get('/active-trip', asyncHandler(async (req, res) => {
-  // TODO: Fetch the active trip for this driver
-  // For now, return empty or implement logic
+  const trip = await Trip.findActiveByDriverId(req.userId);
 
   res.status(200).json({
     success: true,
-    data: null
+    data: trip // This will return the trip object or null if they are idle
   });
 }));
 

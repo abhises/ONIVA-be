@@ -201,21 +201,22 @@ class Trip {
     }
   }
 
-  static async getActiveTrips() {
+ static async findActiveByDriverId(driverId) {
     try {
       const result = await query(
         `SELECT t.*, 
-                c.full_name as client_name, c.phone as client_phone,
-                d.user_id as driver_id
+                u.full_name as client_name, u.phone as client_phone
          FROM trips t
-         JOIN users c ON t.client_id = c.id
-         LEFT JOIN drivers d ON t.driver_id = d.user_id
-         WHERE t.status IN ('pending', 'accepted', 'in_progress', 'waiting_for_pickup')
-         ORDER BY t.created_at DESC`
+         JOIN users u ON t.client_id = u.id
+         WHERE t.driver_id = $1 
+         AND t.status IN ('accepted', 'in_progress', 'waiting_for_pickup')
+         ORDER BY t.created_at DESC
+         LIMIT 1`,
+        [driverId]
       );
-      return result.rows;
+      return result.rows[0] || null;
     } catch (error) {
-      logger.error('Error fetching active trips:', error);
+      logger.error('Error finding active driver trip:', error);
       throw error;
     }
   }

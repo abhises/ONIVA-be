@@ -7,8 +7,9 @@ const Driver = require("../models/Driver");
 const Trip = require("../models/Trip");
 const { query } = require("../config/database");
 const logger = require("../utils/logger");
+const { notifyDriver } = require("./socket.service"); // Ensure this is imported correctly
 
-const ACCEPT_TIMEOUT = 300000; // 60 seconds
+const ACCEPT_TIMEOUT = 300000; // 5 minutes in milliseconds
 const MAX_ASSIGNMENT_ATTEMPTS = 3;
 
 class DispatchService {
@@ -18,10 +19,13 @@ class DispatchService {
       pickupLat,
       pickupLng,
       region,
-      maxDistance = 5, // km
+      maxDistance = 1550, // km
     } = tripData;
 
     try {
+      // 1. Log the start of the search
+      console.log(`🔍 [Dispatch] Searching for drivers near ${pickupLat}, ${pickupLng} (Trip: ${tripId})`);
+
       // Get available drivers near the pickup location
       const availableDrivers = await Driver.getNearestDrivers(
         pickupLng,
@@ -38,6 +42,8 @@ class DispatchService {
         };
       }
 
+      console.log(`✅ [Dispatch] Found ${availableDrivers.length} drivers nearby for Trip ${tripId}`);
+
       // Attempt to assign to nearest driver first
       for (
         let i = 0;
@@ -45,6 +51,8 @@ class DispatchService {
         i++
       ) {
         const driver = availableDrivers[i];
+        console.log(`📤 [Dispatch] Sending request to Driver ID: ${driver.user_id}`);
+        
         const assigned = await this.sendAssignmentRequest(
           tripId,
           driver.user_id,
@@ -76,27 +84,27 @@ class DispatchService {
 
   static async sendAssignmentRequest(tripId, driverId) {
     try {
-      // Create booking request
-      // New: NOW() + INTERVAL '5 minutes'
+      // Create booking request using Database UTC time to avoid local time mismatches
       const result = await query(
         `INSERT INTO booking_requests (trip_id, driver_id, status, expires_at, created_at)
-   VALUES ($1, $2, $3, (CURRENT_TIMESTAMP AT TIME ZONE 'UTC') + INTERVAL '5 minutes', (CURRENT_TIMESTAMP AT TIME ZONE 'UTC'))
-   RETURNING *`,
-        [tripId, driverId, "pending"],
+         VALUES ($1, $2, 'pending', (CURRENT_TIMESTAMP AT TIME ZONE 'UTC') + INTERVAL '5 minutes', (CURRENT_TIMESTAMP AT TIME ZONE 'UTC'))
+         RETURNING *`,
+        [tripId, driverId],
       );
 
       const request = result.rows[0];
+      
       logger.debug("Booking request sent", {
         tripId,
         driverId,
         requestId: request.id,
       });
 
-      // TODO: Send push notification to driver
-      await NotificationService.notifyDriver(driverId, {
-        type: "booking_request",
-        tripId,
-        expiresAt: request.expires_at,
+      // REAL-TIME NOTIFICATION via Socket
+      notifyDriver(driverId, 'new_booking_request', {
+        requestId: request.id,
+        tripId: tripId,
+        expiresAt: request.expires_at
       });
 
       // Wait for driver response (with timeout)
@@ -154,15 +162,15 @@ class DispatchService {
         } catch (error) {
           logger.error("Error checking driver response:", error);
         }
-      }, 1000); // Check every second
+      }, 2000); // Check every 2 seconds to reduce DB load
     });
   }
 
-  static async acceptBooking(requestId, driverId) {
+ static async acceptBooking(requestId, driverId) {
     try {
       const result = await query(
         `UPDATE booking_requests 
-         SET status = $1, accepted_at = NOW()
+         SET status = $1, accepted_at = (CURRENT_TIMESTAMP AT TIME ZONE 'UTC')
          WHERE id = $2 AND driver_id = $3
          RETURNING *`,
         ["accepted", requestId, driverId],
@@ -174,10 +182,11 @@ class DispatchService {
 
       const request = result.rows[0];
 
-      // Update trip status to 'accepted'
+      // 🟢 CHANGE THIS: Change 'assigned' to 'accepted' 
+      // to match your database check constraint
       await query(
-        "UPDATE trips SET driver_id = $1, status = $2, updated_at = NOW() WHERE id = $3",
-        [driverId, "accepted", request.trip_id],
+        "UPDATE trips SET driver_id = $1, status = $2, updated_at = (CURRENT_TIMESTAMP AT TIME ZONE 'UTC') WHERE id = $3",
+        [driverId, "accepted", request.trip_id], 
       );
 
       logger.info("Booking accepted", {
@@ -191,12 +200,11 @@ class DispatchService {
       throw error;
     }
   }
-
   static async rejectBooking(requestId, driverId, reason) {
     try {
       const result = await query(
         `UPDATE booking_requests 
-         SET status = $1, rejection_reason = $2, rejected_at = NOW()
+         SET status = $1, rejection_reason = $2, rejected_at = (CURRENT_TIMESTAMP AT TIME ZONE 'UTC')
          WHERE id = $3 AND driver_id = $4
          RETURNING *`,
         ["rejected", reason, requestId, driverId],
@@ -217,13 +225,17 @@ class DispatchService {
   static async getPendingRequests(driverId) {
     try {
       const result = await query(
-        `SELECT br.*, t.pickup_address, t.destination_address, t.total_price,
+        `SELECT br.id as request_id, br.status as request_status, br.expires_at,
+                t.pickup_address, t.destination_address, t.total_price,
                 t.pickup_latitude, t.pickup_longitude, t.estimated_distance, 
                 t.estimated_duration
          FROM booking_requests br
          JOIN trips t ON br.trip_id = t.id
-         WHERE br.driver_id = $1 AND br.status = 'pending' AND br.expires_at > NOW()
-         ORDER BY br.created_at DESC`,
+         WHERE br.driver_id = $1 
+           AND br.status = 'pending' 
+           AND br.expires_at > (CURRENT_TIMESTAMP AT TIME ZONE 'UTC')
+         ORDER BY br.created_at DESC
+         LIMIT 1`,
         [driverId],
       );
       return result.rows;
