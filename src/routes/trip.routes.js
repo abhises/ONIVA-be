@@ -14,11 +14,18 @@ router.get('/:tripId', asyncHandler(async (req, res) => {
   const trip = await Trip.findById(req.params.tripId);
 
   if (!trip) {
-    throw new AppError('Trip not found', 404);
+    return res.status(404).json({ success: false, message: 'Trip not found' });
   }
 
-  // Check authorization: client or driver can view
-  if (trip.client_id !== req.userId && trip.driver_id !== req.userId) {
+  // Convert to String to avoid Type Mismatch (e.g., 12 vs "12")
+  const clientId = String(trip.client_id);
+  const driverId = String(trip.driver_id);
+  const currentUserId = String(req.userId);
+
+  console.log(`DEBUG: Client: ${clientId}, Driver: ${driverId}, Requester: ${currentUserId}`);
+
+  // Check authorization
+  if (clientId !== currentUserId && driverId !== currentUserId) {
     throw new AppError('Unauthorized to view this trip', 403);
   }
 
@@ -27,7 +34,6 @@ router.get('/:tripId', asyncHandler(async (req, res) => {
     data: trip
   });
 }));
-
 // Get trip status
 router.get('/:tripId/status', asyncHandler(async (req, res) => {
   const trip = await Trip.findById(req.params.tripId);
