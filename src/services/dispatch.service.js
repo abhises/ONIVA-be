@@ -3,12 +3,12 @@
  * Handles driver assignment and booking logic
  */
 
-const Driver = require('../models/Driver');
-const Trip = require('../models/Trip');
-const { query } = require('../config/database');
-const logger = require('../utils/logger');
+const Driver = require("../models/Driver");
+const Trip = require("../models/Trip");
+const { query } = require("../config/database");
+const logger = require("../utils/logger");
 
-const ACCEPT_TIMEOUT = 60000; // 60 seconds
+const ACCEPT_TIMEOUT = 300000; // 60 seconds
 const MAX_ASSIGNMENT_ATTEMPTS = 3;
 
 class DispatchService {
@@ -18,7 +18,7 @@ class DispatchService {
       pickupLat,
       pickupLng,
       region,
-      maxDistance = 5 // km
+      maxDistance = 5, // km
     } = tripData;
 
     try {
@@ -27,43 +27,49 @@ class DispatchService {
         pickupLng,
         pickupLat,
         region,
-        maxDistance
+        maxDistance,
       );
 
       if (availableDrivers.length === 0) {
-        logger.warn('No drivers available', { tripId, region });
+        logger.warn("No drivers available", { tripId, region });
         return {
           success: false,
-          message: 'No drivers available in your area'
+          message: "No drivers available in your area",
         };
       }
 
       // Attempt to assign to nearest driver first
-      for (let i = 0; i < Math.min(availableDrivers.length, MAX_ASSIGNMENT_ATTEMPTS); i++) {
+      for (
+        let i = 0;
+        i < Math.min(availableDrivers.length, MAX_ASSIGNMENT_ATTEMPTS);
+        i++
+      ) {
         const driver = availableDrivers[i];
-        const assigned = await this.sendAssignmentRequest(tripId, driver.user_id);
-        
+        const assigned = await this.sendAssignmentRequest(
+          tripId,
+          driver.user_id,
+        );
+
         if (assigned) {
           return {
             success: true,
-            message: 'Driver assigned successfully',
+            message: "Driver assigned successfully",
             driverId: driver.user_id,
             driverName: driver.full_name,
             driverRating: driver.rating,
-            distance: driver.distance
+            distance: driver.distance,
           };
         }
       }
 
       // If no driver accepted within timeout
-      logger.warn('No driver accepted assignment', { tripId });
+      logger.warn("No driver accepted assignment", { tripId });
       return {
         success: false,
-        message: 'Unable to find available driver. Please try again.'
+        message: "Unable to find available driver. Please try again.",
       };
-
     } catch (error) {
-      logger.error('Error in dispatch service:', error);
+      logger.error("Error in dispatch service:", error);
       throw error;
     }
   }
@@ -71,29 +77,36 @@ class DispatchService {
   static async sendAssignmentRequest(tripId, driverId) {
     try {
       // Create booking request
+      // New: NOW() + INTERVAL '5 minutes'
       const result = await query(
         `INSERT INTO booking_requests (trip_id, driver_id, status, expires_at, created_at)
-         VALUES ($1, $2, $3, NOW() + INTERVAL '1 minute', NOW())
-         RETURNING *`,
-        [tripId, driverId, 'pending']
+   VALUES ($1, $2, $3, (CURRENT_TIMESTAMP AT TIME ZONE 'UTC') + INTERVAL '5 minutes', (CURRENT_TIMESTAMP AT TIME ZONE 'UTC'))
+   RETURNING *`,
+        [tripId, driverId, "pending"],
       );
 
       const request = result.rows[0];
-      logger.debug('Booking request sent', { tripId, driverId, requestId: request.id });
+      logger.debug("Booking request sent", {
+        tripId,
+        driverId,
+        requestId: request.id,
+      });
 
       // TODO: Send push notification to driver
-      // await NotificationService.notifyDriver(driverId, {
-      //   type: 'booking_request',
-      //   tripId,
-      //   expiresAt: request.expires_at
-      // });
+      await NotificationService.notifyDriver(driverId, {
+        type: "booking_request",
+        tripId,
+        expiresAt: request.expires_at,
+      });
 
       // Wait for driver response (with timeout)
-      const accepted = await this.waitForDriverResponse(request.id, ACCEPT_TIMEOUT);
+      const accepted = await this.waitForDriverResponse(
+        request.id,
+        ACCEPT_TIMEOUT,
+      );
       return accepted;
-
     } catch (error) {
-      logger.error('Error sending assignment request:', error);
+      logger.error("Error sending assignment request:", error);
       return false;
     }
   }
@@ -104,8 +117,8 @@ class DispatchService {
       const checkInterval = setInterval(async () => {
         try {
           const result = await query(
-            'SELECT status FROM booking_requests WHERE id = $1',
-            [requestId]
+            "SELECT status FROM booking_requests WHERE id = $1",
+            [requestId],
           );
 
           if (result.rows.length === 0) {
@@ -116,13 +129,13 @@ class DispatchService {
 
           const request = result.rows[0];
 
-          if (request.status === 'accepted') {
+          if (request.status === "accepted") {
             clearInterval(checkInterval);
             resolve(true);
             return;
           }
 
-          if (request.status === 'rejected') {
+          if (request.status === "rejected") {
             clearInterval(checkInterval);
             resolve(false);
             return;
@@ -131,15 +144,15 @@ class DispatchService {
           if (Date.now() - startTime > timeout) {
             // Mark as expired
             await query(
-              'UPDATE booking_requests SET status = $1 WHERE id = $2',
-              ['expired', requestId]
+              "UPDATE booking_requests SET status = $1 WHERE id = $2",
+              ["expired", requestId],
             );
             clearInterval(checkInterval);
             resolve(false);
             return;
           }
         } catch (error) {
-          logger.error('Error checking driver response:', error);
+          logger.error("Error checking driver response:", error);
         }
       }, 1000); // Check every second
     });
@@ -152,26 +165,29 @@ class DispatchService {
          SET status = $1, accepted_at = NOW()
          WHERE id = $2 AND driver_id = $3
          RETURNING *`,
-        ['accepted', requestId, driverId]
+        ["accepted", requestId, driverId],
       );
 
       if (result.rows.length === 0) {
-        throw new Error('Booking request not found or invalid driver');
+        throw new Error("Booking request not found or invalid driver");
       }
 
       const request = result.rows[0];
 
       // Update trip status to 'accepted'
       await query(
-        'UPDATE trips SET driver_id = $1, status = $2, updated_at = NOW() WHERE id = $3',
-        [driverId, 'accepted', request.trip_id]
+        "UPDATE trips SET driver_id = $1, status = $2, updated_at = NOW() WHERE id = $3",
+        [driverId, "accepted", request.trip_id],
       );
 
-      logger.info('Booking accepted', { requestId, driverId, tripId: request.trip_id });
+      logger.info("Booking accepted", {
+        requestId,
+        driverId,
+        tripId: request.trip_id,
+      });
       return request;
-
     } catch (error) {
-      logger.error('Error accepting booking:', error);
+      logger.error("Error accepting booking:", error);
       throw error;
     }
   }
@@ -183,18 +199,17 @@ class DispatchService {
          SET status = $1, rejection_reason = $2, rejected_at = NOW()
          WHERE id = $3 AND driver_id = $4
          RETURNING *`,
-        ['rejected', reason, requestId, driverId]
+        ["rejected", reason, requestId, driverId],
       );
 
       if (result.rows.length === 0) {
-        throw new Error('Booking request not found');
+        throw new Error("Booking request not found");
       }
 
-      logger.info('Booking rejected', { requestId, driverId, reason });
+      logger.info("Booking rejected", { requestId, driverId, reason });
       return result.rows[0];
-
     } catch (error) {
-      logger.error('Error rejecting booking:', error);
+      logger.error("Error rejecting booking:", error);
       throw error;
     }
   }
@@ -209,11 +224,11 @@ class DispatchService {
          JOIN trips t ON br.trip_id = t.id
          WHERE br.driver_id = $1 AND br.status = 'pending' AND br.expires_at > NOW()
          ORDER BY br.created_at DESC`,
-        [driverId]
+        [driverId],
       );
       return result.rows;
     } catch (error) {
-      logger.error('Error fetching pending requests:', error);
+      logger.error("Error fetching pending requests:", error);
       throw error;
     }
   }

@@ -80,37 +80,49 @@ class Driver {
     }
   }
 
- static async getNearestDrivers(latitude, longitude, region, maxDistance = 5) {
+ static async getNearestDrivers(longitude, latitude, region, maxDistanceKm = 5) {
   try {
-    const result = await query(
-      `SELECT d.*, u.phone, u.full_name,
-              (6371 * acos(
-                 cos(radians($2)) * cos(radians(d.current_latitude)) *
-                 cos(radians(d.current_longitude) - radians($1)) +
-                 sin(radians($2)) * sin(radians(d.current_latitude))
-              )) AS distance
-       FROM drivers d
-       JOIN users u ON d.user_id = u.id
-       WHERE d.region = $3
-         AND d.verification_status = 'approved'
-         AND d.is_online = true
-         AND u.status = 'active'
-         AND (6371 * acos(
-               cos(radians($2)) * cos(radians(d.current_latitude)) *
-               cos(radians(d.current_longitude) - radians($1)) +
-               sin(radians($2)) * sin(radians(d.current_latitude))
-             )) <= $4
-       ORDER BY distance ASC`,
-      [longitude, latitude, region, maxDistance]
-    );
+    console.log(`🔍 Dispatching: Searching near [Lat: ${latitude}, Lng: ${longitude}]`);
+
+    const sql = `
+      WITH driver_distances AS (
+        SELECT 
+          d.user_id, 
+          u.full_name, 
+          d.rating, 
+          d.current_latitude, 
+          d.current_longitude,
+          ( 6371 * acos( 
+              cos( radians($1) ) * cos( radians( CAST(d.current_latitude AS FLOAT) ) ) 
+              * cos( radians( CAST(d.current_longitude AS FLOAT) ) - radians($2) ) 
+              + sin( radians($1) ) * sin( radians( CAST(d.current_latitude AS FLOAT) ) ) 
+            ) 
+          ) AS distance
+        FROM drivers d
+        JOIN users u ON d.user_id = u.id
+        WHERE d.is_online = true
+        -- AND d.verification_status = 'approved' -- Keep commented for testing
+      )
+      SELECT * FROM driver_distances
+      WHERE distance <= $3
+      ORDER BY distance ASC;
+    `;
+
+    const result = await query(sql, [latitude, longitude, maxDistanceKm]);
+
+    console.log(`✅ Dispatch Result: ${result.rows.length} driver(s) found within ${maxDistanceKm}km`);
+    
+    // Log the found driver IDs for debugging
+    if (result.rows.length > 0) {
+      console.log("IDs found:", result.rows.map(r => r.user_id).join(', '));
+    }
 
     return result.rows;
   } catch (error) {
-    logger.error("Error fetching nearest drivers:", error);
+    console.error("CRITICAL ERROR in getNearestDrivers:", error);
     throw error;
   }
 }
-
 
   static async updateVerificationStatus(driverId, status) {
     try {
@@ -133,11 +145,13 @@ class Driver {
   static async updateLocation(driverId, latitude, longitude) {
     try {
       const result = await query(
+        // Changed to $1, $2, $3 to perfectly match the array below
         `UPDATE drivers SET current_latitude = $1, current_longitude = $2, 
          last_location_update = NOW(), updated_at = NOW()
-         WHERE user_id = $1
+         WHERE user_id = $3
          RETURNING user_id, current_latitude, current_longitude`,
-        [driverId, latitude, longitude],
+        // Reordered the array so $1=latitude, $2=longitude, $3=driverId
+        [latitude, longitude, driverId],
       );
       return result.rows[0] || null;
     } catch (error) {

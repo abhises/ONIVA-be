@@ -178,13 +178,32 @@ router.post('/book-trip', asyncHandler(async (req, res) => {
 }));
 
 // Get trip details
+// Get trip details
 router.get('/trips/:tripId', asyncHandler(async (req, res) => {
   const trip = await Trip.findById(req.params.tripId);
 
-  if (!trip || trip.client_id !== req.userId) {
+  // 1. ADD THESE LOGS to see exactly what is happening in your backend terminal
+  console.log("---- DEBUGGING TRIP FETCH ----");
+  console.log("Trip ID requested:", req.params.tripId);
+  console.log("Trip found in DB:", trip ? "Yes" : "No");
+  
+  if (trip) {
+    const ownerId = trip.client_id || trip.clientId; // handle both naming styles
+    console.log("Trip Owner ID:", ownerId, "| Type:", typeof ownerId);
+    console.log("Request User ID:", req.userId, "| Type:", typeof req.userId);
+    
+    // 2. USE LOOSE EQUALITY (!= instead of !==) or convert both to strings
+    // This prevents 5 !== "5" from throwing an error
+    if (String(ownerId) !== String(req.userId)) {
+      console.log("❌ AUTHORIZATION FAILED: IDs do not match");
+      throw new AppError('Trip not found or unauthorized', 404);
+    }
+  } else {
+    console.log("❌ FAILED: Trip is null (not found in DB)");
     throw new AppError('Trip not found or unauthorized', 404);
   }
 
+  console.log("✅ SUCCESS: Sending trip data");
   res.status(200).json({
     success: true,
     data: trip
