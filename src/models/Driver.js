@@ -46,6 +46,37 @@ class Driver {
     });
   }
 
+  static async getDashboardStats(driverId) {
+  try {
+    const result = await query(`
+      SELECT 
+        -- Current rating from driver profile
+        (SELECT COALESCE(rating, 0) FROM drivers WHERE user_id = $1) as rating,
+        
+        -- Lifetime stats
+        (SELECT COUNT(*) FROM trips WHERE driver_id = $1 AND status = 'completed') as total_trips,
+        (SELECT COALESCE(SUM(driver_earnings), 0) FROM trips WHERE driver_id = $1 AND status = 'completed') as total_earnings,
+        
+        -- Weekly trend (last 7 days)
+        (SELECT COUNT(*) FROM trips 
+         WHERE driver_id = $1 
+         AND status = 'completed' 
+         AND created_at >= NOW() - INTERVAL '7 days') as trips_this_week,
+         
+        -- Earnings trend (percentage change comparison could be done in JS, but let's get the value)
+        (SELECT COALESCE(SUM(driver_earnings), 0) FROM trips 
+         WHERE driver_id = $1 
+         AND status = 'completed' 
+         AND created_at >= NOW() - INTERVAL '7 days') as earnings_this_week
+    `, [driverId]);
+
+    return result.rows[0];
+  } catch (error) {
+    logger.error("Error fetching driver dashboard stats:", error);
+    throw error;
+  }
+}
+
   static async findById(driverId) {
     try {
       const result = await query(
@@ -192,31 +223,40 @@ class Driver {
   }
 
   static async getEarnings(driverId, startDate, endDate) {
-    try {
-      const result = await query(
-        `SELECT 
-          COUNT(*) as total_trips,
-          SUM(driver_earnings) as total_earnings,
-          AVG(driver_earnings) as avg_earning_per_trip,
-          SUM(platform_commission) as total_commission_paid
-         FROM trips
-         WHERE driver_id = $1 AND status = 'completed' 
-         AND created_at BETWEEN $2 AND $3`,
-        [driverId, startDate, endDate],
-      );
-      return (
-        result.rows[0] || {
-          total_trips: 0,
-          total_earnings: 0,
-          avg_earning_per_trip: 0,
-          total_commission_paid: 0,
-        }
-      );
-    } catch (error) {
-      logger.error("Error fetching driver earnings:", error);
-      throw error;
-    }
+  try {
+    // 1. Get Summary Stats
+    const summaryResult = await query(
+      `SELECT 
+        COUNT(*)::int as "tripCount",
+        COALESCE(SUM(driver_earnings), 0)::float as "totalEarnings",
+        COALESCE(AVG(driver_earnings), 0)::float as "averagePerTrip"
+       FROM trips
+       WHERE driver_id = $1 AND status = 'completed' 
+       AND created_at BETWEEN $2 AND $3`,
+      [driverId, startDate, endDate]
+    );
+
+    // 2. Get Weekly Breakdown (Groups by week start date)
+    const weeklyResult = await query(
+      `SELECT SUM(driver_earnings)::float as amount
+       FROM trips
+       WHERE driver_id = $1 AND status = 'completed'
+       AND created_at BETWEEN $2 AND $3
+       GROUP BY DATE_TRUNC('week', created_at)
+       ORDER BY DATE_TRUNC('week', created_at) ASC`,
+      [driverId, startDate, endDate]
+    );
+
+    const summary = summaryResult.rows[0];
+    return {
+      ...summary,
+      weeklyEarnings: weeklyResult.rows.map(row => row.amount)
+    };
+  } catch (error) {
+    logger.error("Error fetching driver earnings:", error);
+    throw error;
   }
+}
 
   static async suspend(driverId, reason) {
     return transaction(async (client) => {
