@@ -295,5 +295,13 @@ router.post('/trips/:tripId/start-with-otp', asyncHandler(async (req, res) => {
     data: trip
   });
 }));
+// Get active pricing configuration
+router.get('/pricing/active', asyncHandler(async (req, res) => {
+  const activeConfig = await PricingService.getPricingConfig();
+  res.status(200).json({
+    success: true,
+    data: activeConfig
+  });
+}));
 
 module.exports = router;
