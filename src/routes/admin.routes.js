@@ -473,4 +473,200 @@ router.post(
   }),
 );
 
+
+router.get(
+  '/trips/active',
+  asyncHandler(async (req, res) => {
+    const limit = req.query.limit ? parseInt(req.query.limit) : 20;
+    const offset = req.query.offset ? parseInt(req.query.offset) : 0;
+    const status = req.query.status || 'all';
+
+    // Call the model
+    const { trips, total } = await Trip.getActiveTrips(limit, offset, status);
+
+    // Format response
+    const activeTrips = trips.map(trip => ({
+      id: trip.id,
+      status: trip.status,
+      bookingType: trip.booking_type,
+      
+      pickupAddress: trip.pickup_address,
+      dropoffAddress: trip.dropoff_address,
+      distance: trip.distance,
+      duration: trip.duration,
+      
+      totalPrice: trip.total_price,
+      baseFare: trip.base_fare,
+      distanceCharge: trip.distance_charge,
+      surcharge: trip.surcharge,
+      
+      createdAt: trip.created_at,
+      assignedAt: trip.assigned_at,
+      startedAt: trip.started_at,
+      completedAt: trip.completed_at,
+      cancelledAt: trip.cancelled_at,
+      
+      client: trip.client_id ? {
+        id: trip.client_id,
+        name: trip.client_name,
+        phone: trip.client_phone,
+        email: trip.client_email,
+        rating: trip.client_rating
+      } : null,
+      
+      driver: trip.driver_id ? {
+        id: trip.driver_id,
+        name: trip.driver_name,
+        phone: trip.driver_phone,
+        email: trip.driver_email,
+        rating: trip.driver_rating,
+        isOnline: trip.driver_is_online,
+        car: trip.car_model ? {
+          model: trip.car_model,
+          licensePlate: trip.license_plate,
+          color: trip.car_color
+        } : null
+      } : null
+    }));
+
+    res.status(200).json({
+      success: true,
+      data: activeTrips,
+      pagination: {
+        limit: limit,
+        offset: offset,
+        total: total,
+        hasMore: offset + limit < total
+      },
+      stats: {
+        scheduled: trips.filter(t => t.status === 'scheduled').length,
+        assigned: trips.filter(t => t.status === 'assigned').length,
+        started: trips.filter(t => t.status === 'started').length,
+        total: trips.length
+      }
+    });
+  })
+);
+
+
+
+/**
+ * Get trip statistics (dashboard metrics)
+ * GET /api/admin/trips/statistics
+ */
+router.get(
+  '/statistics',
+  asyncHandler(async (req, res) => {
+    
+    // Call the model
+    const result = await Trip.getDashboardStatistics();
+
+    res.status(200).json({
+      success: true,
+      data: {
+        active: {
+          scheduled: parseInt(result.scheduled_count || 0),
+          assigned: parseInt(result.assigned_count || 0),
+          started: parseInt(result.started_count || 0),
+          total: parseInt(result.active_trips || 0)
+        },
+        completed: {
+          count: parseInt(result.completed_count || 0),
+          revenue: parseFloat(result.total_revenue || 0),
+          averageFare: parseFloat(result.avg_fare || 0),
+          totalDistance: parseFloat(result.total_distance || 0),
+          averageDistance: parseFloat(result.avg_distance || 0),
+          averageDuration: parseFloat(result.avg_duration || 0)
+        },
+        cancelled: parseInt(result.cancelled_count || 0),
+        total: parseInt(result.total_trips || 0)
+      },
+      timeframe: 'Last 24 hours'
+    });
+  })
+);
+/**
+ * Get trip details (admin view)
+ * GET /api/admin/trips/:tripId
+ */
+router.get(
+  '/trips/:tripId',
+  asyncHandler(async (req, res) => {
+    const tripId = req.params.tripId;
+
+    // Call the model
+    const trip = await Trip.getAdminTripDetails(tripId);
+
+    if (!trip) {
+      return res.status(404).json({
+        success: false,
+        message: 'Trip not found'
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      data: {
+        id: trip.id,
+        status: trip.status,
+        bookingType: trip.booking_type,
+        
+        pickupAddress: trip.pickup_address,
+        dropoffAddress: trip.dropoff_address,
+        pickupLatitude: trip.pickup_latitude,
+        pickupLongitude: trip.pickup_longitude,
+        dropoffLatitude: trip.dropoff_latitude,
+        dropoffLongitude: trip.dropoff_longitude,
+        distance: trip.distance,
+        duration: trip.duration,
+        
+        totalPrice: trip.total_price,
+        baseFare: trip.base_fare,
+        distanceCharge: trip.distance_charge,
+        surcharge: trip.surcharge,
+        commission: trip.commission,
+        
+        createdAt: trip.created_at,
+        assignedAt: trip.assigned_at,
+        startedAt: trip.started_at,
+        completedAt: trip.completed_at,
+        cancelledAt: trip.cancelled_at,
+        cancellationReason: trip.cancellation_reason,
+        
+        client: {
+          id: trip.client_id,
+          name: trip.client_name,
+          phone: trip.client_phone,
+          email: trip.client_email,
+          rating: trip.client_rating,
+          status: trip.client_status
+        },
+        
+        driver: trip.driver_id ? {
+          id: trip.driver_id,
+          name: trip.driver_name,
+          phone: trip.driver_phone,
+          email: trip.driver_email,
+          rating: trip.driver_rating,
+          status: trip.driver_status,
+          isOnline: trip.driver_is_online,
+          totalTrips: trip.driver_total_trips,
+          totalEarnings: trip.driver_total_earnings,
+          car: trip.car_model ? {
+            model: trip.car_model,
+            licensePlate: trip.license_plate,
+            color: trip.car_color
+          } : null
+        } : null,
+        
+        rating: trip.client_rating_given ? {
+          rating: trip.client_rating_given,
+          review: trip.client_review,
+          createdAt: trip.rating_date
+        } : null
+      }
+    });
+  })
+);
+
 module.exports = router;

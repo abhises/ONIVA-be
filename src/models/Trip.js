@@ -252,6 +252,145 @@ class Trip {
       throw error;
     }
   }
+
+
+  static async getActiveTrips(limit = 20, offset = 0, status = 'all') {
+    try {
+      let statusFilter = '';
+      const queryParams = [limit, offset];
+      
+      // Securely parameterize the status if it's not 'all'
+      if (status !== 'all') {
+        statusFilter = `AND t.status = $3`;
+        queryParams.push(status);
+      }
+
+      // 1. Get Trips
+      const result = await query(
+        `
+        SELECT 
+          t.id, t.client_id, t.driver_id, t.status, t.booking_type,
+          t.pickup_address, t.dropoff_address, t.distance, t.duration,
+          t.total_price, t.base_fare, t.distance_charge, t.surcharge,
+          t.created_at, t.assigned_at, t.started_at, t.completed_at, t.cancelled_at,
+          
+          c.full_name as client_name, c.phone as client_phone, c.email as client_email, c.rating as client_rating,
+          
+          d.full_name as driver_name, d.phone as driver_phone, d.email as driver_email, d.rating as driver_rating, d.is_online as driver_is_online,
+          
+          car.model as car_model, car.license_plate, car.color as car_color
+        
+        FROM trips t
+        LEFT JOIN users c ON t.client_id = c.id AND c.role = 'client'
+        LEFT JOIN users d ON t.driver_id = d.id AND d.role = 'driver'
+        LEFT JOIN cars car ON d.id = car.driver_id
+        
+        WHERE t.status IN ('scheduled', 'assigned', 'started')
+        ${statusFilter}
+        
+        ORDER BY t.created_at DESC
+        LIMIT $1 OFFSET $2
+        `,
+        queryParams
+      );
+
+      // 2. Get Count for Pagination
+      const countParams = status !== 'all' ? [status] : [];
+      const countResult = await query(
+        `
+        SELECT COUNT(*) as total
+        FROM trips t
+        WHERE t.status IN ('scheduled', 'assigned', 'started')
+        ${status !== 'all' ? 'AND t.status = $1' : ''}
+        `,
+        countParams
+      );
+
+      return {
+        trips: result.rows,
+        total: parseInt(countResult.rows[0].total)
+      };
+    } catch (error) {
+      logger.error('Error fetching active trips:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get extremely detailed trip view for Admin Dashboard
+   */
+  static async getAdminTripDetails(tripId) {
+    try {
+      const result = await query(
+        `
+        SELECT 
+          t.*,
+          
+          c.full_name as client_name, c.phone as client_phone, c.email as client_email, c.rating as client_rating, c.status as client_status,
+          
+          d.full_name as driver_name, d.phone as driver_phone, d.email as driver_email, d.rating as driver_rating, d.status as driver_status, d.is_online as driver_is_online, d.total_trips as driver_total_trips, d.total_earnings as driver_total_earnings,
+          
+          car.model as car_model, car.license_plate, car.color as car_color,
+          
+          rating.rating as client_rating_given, rating.review as client_review, rating.created_at as rating_date
+        
+        FROM trips t
+        LEFT JOIN users c ON t.client_id = c.id
+        LEFT JOIN users d ON t.driver_id = d.id
+        LEFT JOIN cars car ON d.id = car.driver_id
+        LEFT JOIN ratings rating ON t.id = rating.trip_id
+        
+        WHERE t.id = $1
+        `,
+        [tripId]
+      );
+      return result.rows[0] || null;
+    } catch (error) {
+      logger.error('Error fetching admin trip details:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get 24-hour Trip Statistics for Admin Dashboard
+   */
+  static async getDashboardStatistics() {
+    try {
+      const stats = await query(
+        `
+        SELECT 
+          COUNT(CASE WHEN status = 'scheduled' THEN 1 END) as scheduled_count,
+          COUNT(CASE WHEN status = 'assigned' THEN 1 END) as assigned_count,
+          COUNT(CASE WHEN status = 'started' THEN 1 END) as started_count,
+          COUNT(CASE WHEN status = 'completed' THEN 1 END) as completed_count,
+          COUNT(CASE WHEN status = 'cancelled' THEN 1 END) as cancelled_count,
+          
+          COUNT(CASE WHEN status IN ('scheduled', 'assigned', 'started') THEN 1 END) as active_trips,
+          
+          SUM(CASE WHEN status = 'completed' THEN total_price ELSE 0 END) as total_revenue,
+          AVG(CASE WHEN status = 'completed' THEN total_price ELSE NULL END) as avg_fare,
+          
+          SUM(CASE WHEN status = 'completed' THEN distance ELSE 0 END) as total_distance,
+          AVG(CASE WHEN status = 'completed' THEN distance ELSE NULL END) as avg_distance,
+          
+          AVG(CASE WHEN status = 'completed' THEN duration ELSE NULL END) as avg_duration,
+          
+          COUNT(*) as total_trips
+        
+        FROM trips
+        WHERE created_at >= NOW() - INTERVAL '24 hours'
+        `
+      );
+      return stats.rows[0];
+    } catch (error) {
+      logger.error('Error fetching dashboard statistics:', error);
+      throw error;
+    }
+  }
+
+
+
+ 
 }
 
 module.exports = Trip;

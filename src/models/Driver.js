@@ -47,8 +47,9 @@ class Driver {
   }
 
   static async getDashboardStats(driverId) {
-  try {
-    const result = await query(`
+    try {
+      const result = await query(
+        `
       SELECT 
         -- Current rating from driver profile
         (SELECT COALESCE(rating, 0) FROM drivers WHERE user_id = $1) as rating,
@@ -68,14 +69,16 @@ class Driver {
          WHERE driver_id = $1 
          AND status = 'completed' 
          AND created_at >= NOW() - INTERVAL '7 days') as earnings_this_week
-    `, [driverId]);
+    `,
+        [driverId],
+      );
 
-    return result.rows[0];
-  } catch (error) {
-    logger.error("Error fetching driver dashboard stats:", error);
-    throw error;
+      return result.rows[0];
+    } catch (error) {
+      logger.error("Error fetching driver dashboard stats:", error);
+      throw error;
+    }
   }
-}
 
   static async findById(driverId) {
     try {
@@ -111,11 +114,18 @@ class Driver {
     }
   }
 
- static async getNearestDrivers(longitude, latitude, region, maxDistanceKm = 5) {
-  try {
-    console.log(`🔍 Dispatching: Searching near [Lat: ${latitude}, Lng: ${longitude}]`);
+  static async getNearestDrivers(
+    longitude,
+    latitude,
+    region,
+    maxDistanceKm = 5,
+  ) {
+    try {
+      console.log(
+        `🔍 Dispatching: Searching near [Lat: ${latitude}, Lng: ${longitude}]`,
+      );
 
-    const sql = `
+      const sql = `
       WITH driver_distances AS (
         SELECT 
           d.user_id, 
@@ -139,21 +149,23 @@ class Driver {
       ORDER BY distance ASC;
     `;
 
-    const result = await query(sql, [latitude, longitude, maxDistanceKm]);
+      const result = await query(sql, [latitude, longitude, maxDistanceKm]);
 
-    console.log(`✅ Dispatch Result: ${result.rows.length} driver(s) found within ${maxDistanceKm}km`);
-    
-    // Log the found driver IDs for debugging
-    if (result.rows.length > 0) {
-      console.log("IDs found:", result.rows.map(r => r.user_id).join(', '));
+      console.log(
+        `✅ Dispatch Result: ${result.rows.length} driver(s) found within ${maxDistanceKm}km`,
+      );
+
+      // Log the found driver IDs for debugging
+      if (result.rows.length > 0) {
+        console.log("IDs found:", result.rows.map((r) => r.user_id).join(", "));
+      }
+
+      return result.rows;
+    } catch (error) {
+      console.error("CRITICAL ERROR in getNearestDrivers:", error);
+      throw error;
     }
-
-    return result.rows;
-  } catch (error) {
-    console.error("CRITICAL ERROR in getNearestDrivers:", error);
-    throw error;
   }
-}
 
   static async updateVerificationStatus(driverId, status) {
     try {
@@ -206,18 +218,18 @@ class Driver {
       throw error;
     }
   }
-static async updateRating(driverId, rating, review, tripId, clientId) {
-  return transaction(async (client) => {
-    // 1. Insert into trip_ratings table correctly
-    await client.query(
-      `INSERT INTO trip_ratings (trip_id, rater_id, rating, review, created_at)
+  static async updateRating(driverId, rating, review, tripId, clientId) {
+    return transaction(async (client) => {
+      // 1. Insert into trip_ratings table correctly
+      await client.query(
+        `INSERT INTO trip_ratings (trip_id, rater_id, rating, review, created_at)
        VALUES ($1, $2, $3, $4, NOW())`,
-      [tripId, clientId, rating, review] // Use clientId here
-    );
+        [tripId, clientId, rating, review], // Use clientId here
+      );
 
-    // 2. Update the driver's aggregate rating
-    await client.query(
-      `UPDATE drivers 
+      // 2. Update the driver's aggregate rating
+      await client.query(
+        `UPDATE drivers 
        SET rating = (
          SELECT AVG(rating)::DECIMAL(3,2) 
          FROM trip_ratings 
@@ -225,45 +237,45 @@ static async updateRating(driverId, rating, review, tripId, clientId) {
        ),
        total_trips = total_trips + 1
        WHERE user_id = $1`,
-      [driverId]
-    );
-  });
-}
+        [driverId],
+      );
+    });
+  }
   static async getEarnings(driverId, startDate, endDate) {
-  try {
-    // 1. Get Summary Stats
-    const summaryResult = await query(
-      `SELECT 
+    try {
+      // 1. Get Summary Stats
+      const summaryResult = await query(
+        `SELECT 
         COUNT(*)::int as "tripCount",
         COALESCE(SUM(driver_earnings), 0)::float as "totalEarnings",
         COALESCE(AVG(driver_earnings), 0)::float as "averagePerTrip"
        FROM trips
        WHERE driver_id = $1 AND status = 'completed' 
        AND created_at BETWEEN $2 AND $3`,
-      [driverId, startDate, endDate]
-    );
+        [driverId, startDate, endDate],
+      );
 
-    // 2. Get Weekly Breakdown (Groups by week start date)
-    const weeklyResult = await query(
-      `SELECT SUM(driver_earnings)::float as amount
+      // 2. Get Weekly Breakdown (Groups by week start date)
+      const weeklyResult = await query(
+        `SELECT SUM(driver_earnings)::float as amount
        FROM trips
        WHERE driver_id = $1 AND status = 'completed'
        AND created_at BETWEEN $2 AND $3
        GROUP BY DATE_TRUNC('week', created_at)
        ORDER BY DATE_TRUNC('week', created_at) ASC`,
-      [driverId, startDate, endDate]
-    );
+        [driverId, startDate, endDate],
+      );
 
-    const summary = summaryResult.rows[0];
-    return {
-      ...summary,
-      weeklyEarnings: weeklyResult.rows.map(row => row.amount)
-    };
-  } catch (error) {
-    logger.error("Error fetching driver earnings:", error);
-    throw error;
+      const summary = summaryResult.rows[0];
+      return {
+        ...summary,
+        weeklyEarnings: weeklyResult.rows.map((row) => row.amount),
+      };
+    } catch (error) {
+      logger.error("Error fetching driver earnings:", error);
+      throw error;
+    }
   }
-}
 
   static async suspend(driverId, reason) {
     return transaction(async (client) => {
