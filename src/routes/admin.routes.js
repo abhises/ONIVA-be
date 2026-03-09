@@ -484,67 +484,69 @@ router.get(
     // Call the model
     const { trips, total } = await Trip.getActiveTrips(limit, offset, status);
 
-    // Format response
-    const activeTrips = trips.map(trip => ({
-      id: trip.id,
-      status: trip.status,
-      bookingType: trip.booking_type,
-      
-      pickupAddress: trip.pickup_address,
-      dropoffAddress: trip.dropoff_address,
-      distance: trip.distance,
-      duration: trip.duration,
-      
-      totalPrice: trip.total_price,
-      baseFare: trip.base_fare,
-      distanceCharge: trip.distance_charge,
-      surcharge: trip.surcharge,
-      
-      createdAt: trip.created_at,
-      assignedAt: trip.assigned_at,
-      startedAt: trip.started_at,
-      completedAt: trip.completed_at,
-      cancelledAt: trip.cancelled_at,
-      
-      client: trip.client_id ? {
-        id: trip.client_id,
-        name: trip.client_name,
-        phone: trip.client_phone,
-        email: trip.client_email,
-        rating: trip.client_rating
-      } : null,
-      
-      driver: trip.driver_id ? {
-        id: trip.driver_id,
-        name: trip.driver_name,
-        phone: trip.driver_phone,
-        email: trip.driver_email,
-        rating: trip.driver_rating,
-        isOnline: trip.driver_is_online,
-        car: trip.car_model ? {
-          model: trip.car_model,
-          licensePlate: trip.license_plate,
-          color: trip.car_color
-        } : null
-      } : null
-    }));
+    return res.status(200).json({})
 
-    res.status(200).json({
-      success: true,
-      data: activeTrips,
-      pagination: {
-        limit: limit,
-        offset: offset,
-        total: total,
-        hasMore: offset + limit < total
-      },
-      stats: {
-        scheduled: trips.filter(t => t.status === 'scheduled').length,
-        assigned: trips.filter(t => t.status === 'assigned').length,
-        started: trips.filter(t => t.status === 'started').length,
-        total: trips.length
-      }
-    });
+    // Format response
+    // const activeTrips = trips.map(trip => ({
+    //   id: trip.id,
+    //   status: trip.status,
+    //   bookingType: trip.booking_type,
+      
+    //   pickupAddress: trip.pickup_address,
+    //   dropoffAddress: trip.dropoff_address,
+    //   distance: trip.distance,
+    //   duration: trip.duration,
+      
+    //   totalPrice: trip.total_price,
+    //   baseFare: trip.base_fare,
+    //   distanceCharge: trip.distance_charge,
+    //   surcharge: trip.surcharge,
+      
+    //   createdAt: trip.created_at,
+    //   assignedAt: trip.assigned_at,
+    //   startedAt: trip.started_at,
+    //   completedAt: trip.completed_at,
+    //   cancelledAt: trip.cancelled_at,
+      
+    //   client: trip.client_id ? {
+    //     id: trip.client_id,
+    //     name: trip.client_name,
+    //     phone: trip.client_phone,
+    //     email: trip.client_email,
+    //     rating: trip.client_rating
+    //   } : null,
+      
+    //   driver: trip.driver_id ? {
+    //     id: trip.driver_id,
+    //     name: trip.driver_name,
+    //     phone: trip.driver_phone,
+    //     email: trip.driver_email,
+    //     rating: trip.driver_rating,
+    //     isOnline: trip.driver_is_online,
+    //     car: trip.car_model ? {
+    //       model: trip.car_model,
+    //       licensePlate: trip.license_plate,
+    //       color: trip.car_color
+    //     } : null
+    //   } : null
+    // }));
+
+    // res.status(200).json({
+    //   success: true,
+    //   data: activeTrips,
+    //   pagination: {
+    //     limit: limit,
+    //     offset: offset,
+    //     total: total,
+    //     hasMore: offset + limit < total
+    //   },
+    //   stats: {
+    //     scheduled: trips.filter(t => t.status === 'scheduled').length,
+    //     assigned: trips.filter(t => t.status === 'assigned').length,
+    //     started: trips.filter(t => t.status === 'started').length,
+    //     total: trips.length
+    //   }
+    // });
   })
 );
 
