@@ -7,6 +7,7 @@ const express = require('express');
 const router = express.Router();
 const Trip = require('../models/Trip');
 const User = require('../models/User');
+const Driver = require('../models/Driver'); // <--- ADD THIS LINE
 const PricingService = require('../services/pricing.service');
 const DispatchService = require('../services/dispatch.service');
 const { asyncHandler, AppError } = require('../middleware/errorHandler');
@@ -236,7 +237,8 @@ router.post('/trips/:tripId/rate', asyncHandler(async (req, res) => {
   }
 
   const trip = await Trip.findById(req.params.tripId);
-  if (!trip || trip.client_id !== req.userId) {
+  
+  if (!trip || String(trip.client_id) !== String(req.userId)) {
     throw new AppError('Trip not found or unauthorized', 404);
   }
 
@@ -244,15 +246,18 @@ router.post('/trips/:tripId/rate', asyncHandler(async (req, res) => {
     throw new AppError('Can only rate completed trips', 400);
   }
 
-  // TODO: Update driver rating in database
-  // const result = await Driver.updateRating(trip.driver_id, rating);
+  if (!trip.driver_id) {
+    throw new AppError('No driver associated with this trip', 400);
+  }
 
+  // This will now work because Driver is defined
+// In your router.post('/trips/:tripId/rate'...)
+await Driver.updateRating(trip.driver_id, rating, review, trip.id, req.userId);
   res.status(200).json({
     success: true,
     message: 'Rating submitted successfully'
   });
 }));
-
 // Cancel a trip
 router.post('/trips/:tripId/cancel', asyncHandler(async (req, res) => {
   const { reason } = req.body;

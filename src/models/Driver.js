@@ -206,22 +206,29 @@ class Driver {
       throw error;
     }
   }
+static async updateRating(driverId, rating, review, tripId, clientId) {
+  return transaction(async (client) => {
+    // 1. Insert into trip_ratings table correctly
+    await client.query(
+      `INSERT INTO trip_ratings (trip_id, rater_id, rating, review, created_at)
+       VALUES ($1, $2, $3, $4, NOW())`,
+      [tripId, clientId, rating, review] // Use clientId here
+    );
 
-  static async updateRating(driverId, newRating) {
-    try {
-      const result = await query(
-        `UPDATE drivers SET rating = $1, updated_at = NOW()
-         WHERE user_id = $2
-         RETURNING user_id, rating`,
-        [newRating, driverId],
-      );
-      return result.rows[0] || null;
-    } catch (error) {
-      logger.error("Error updating driver rating:", error);
-      throw error;
-    }
-  }
-
+    // 2. Update the driver's aggregate rating
+    await client.query(
+      `UPDATE drivers 
+       SET rating = (
+         SELECT AVG(rating)::DECIMAL(3,2) 
+         FROM trip_ratings 
+         WHERE trip_id IN (SELECT id FROM trips WHERE driver_id = $1)
+       ),
+       total_trips = total_trips + 1
+       WHERE user_id = $1`,
+      [driverId]
+    );
+  });
+}
   static async getEarnings(driverId, startDate, endDate) {
   try {
     // 1. Get Summary Stats

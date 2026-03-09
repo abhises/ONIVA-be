@@ -244,6 +244,37 @@ class DispatchService {
       throw error;
     }
   }
+
+ static async getRequestById(requestId, driverId) {
+  try {
+    const result = await query(
+      `SELECT 
+          br.id as request_id, 
+          br.status as request_status, 
+          br.expires_at,
+          t.id as trip_id,
+          t.pickup_address, 
+          t.destination_address, 
+          t.total_price,
+          t.estimated_distance,
+          t.estimated_duration,
+          u.full_name as client_name,
+          u.phone as client_phone, -- Fixed: changed u.phone_number to u.phone
+          u.id as client_id,
+          -- Subquery to count previous successful trips for this user
+          (SELECT COUNT(*) FROM trips WHERE client_id = u.id AND status = 'completed') as client_total_rides
+       FROM booking_requests br
+       JOIN trips t ON br.trip_id = t.id
+       JOIN users u ON t.client_id = u.id
+       WHERE br.id = $1 AND br.driver_id = $2`,
+      [requestId, driverId]
+    );
+    return result.rows[0];
+  } catch (error) {
+    logger.error("Error fetching request details:", error);
+    throw error;
+  }
+}
 }
 
 module.exports = DispatchService;

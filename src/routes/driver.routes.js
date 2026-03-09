@@ -135,6 +135,19 @@ router.post('/requests/:requestId/reject', asyncHandler(async (req, res) => {
   });
 }));
 
+router.get('/requests/:id', asyncHandler(async (req, res) => {
+  const requestDetails = await DispatchService.getRequestById(req.params.id, req.userId);
+
+  if (!requestDetails) {
+    return res.status(404).json({ success: false, message: "Request not found" });
+  }
+
+  res.status(200).json({
+    success: true,
+    data: requestDetails
+  });
+}));
+
 // Get active trip
 // Get active trip for the logged-in driver
 router.get('/active-trip', asyncHandler(async (req, res) => {

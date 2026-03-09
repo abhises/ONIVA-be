@@ -56,24 +56,39 @@ class Trip {
     });
   }
 
-  static async findById(tripId) {
-    try {
-      const result = await query(
-        `SELECT t.*, 
-                c.full_name as client_name, c.phone as client_phone,
-                d.user_id as driver_id_check
-         FROM trips t
-         JOIN users c ON t.client_id = c.id
-         LEFT JOIN drivers d ON t.driver_id = d.user_id
-         WHERE t.id = $1`,
-        [tripId]
-      );
-      return result.rows[0] || null;
-    } catch (error) {
-      logger.error('Error finding trip:', error);
-      throw error;
+ static async findById(tripId) {
+  try {
+    const result = await query(
+      `SELECT t.*, 
+              c.full_name as client_name, c.phone as client_phone,
+              u_d.full_name as driver_name, u_d.phone as driver_phone,
+              d.vehicle_info, d.profile_photo as driver_photo, d.rating as driver_avg_rating,
+              tr.rating as rating_value, 
+              tr.review as rating_review, 
+              tr.created_at as rating_created_at
+       FROM trips t
+       JOIN users c ON t.client_id = c.id
+       LEFT JOIN drivers d ON t.driver_id = d.user_id
+       LEFT JOIN users u_d ON d.user_id = u_d.id
+       LEFT JOIN trip_ratings tr ON t.id = tr.trip_id
+       WHERE t.id = $1`,
+      [tripId]
+    );
+
+    const trip = result.rows[0];
+    if (trip && trip.rating_value) {
+      trip.rating = {
+        rating: trip.rating_value,
+        review: trip.rating_review,
+        created_at: trip.rating_created_at
+      };
     }
+    return trip || null;
+  } catch (error) {
+    logger.error('Error finding trip:', error);
+    throw error;
   }
+}
 
   static async updateStatus(tripId, status) {
     try {
