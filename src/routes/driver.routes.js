@@ -11,6 +11,7 @@ const User = require('../models/User');
 const DispatchService = require('../services/dispatch.service');
 const { asyncHandler, AppError } = require('../middleware/errorHandler');
 const { authorize } = require('../middleware/auth');
+const socketService = require('../services/socket.service');
 
 // Create driver profile
 router.post('/profile', asyncHandler(async (req, res) => {
@@ -162,12 +163,13 @@ router.get('/active-trip', asyncHandler(async (req, res) => {
 // Start trip (verify OTP)
 router.post('/trips/:tripId/start', asyncHandler(async (req, res) => {
   const { otp } = req.body;
+  const tripId = req.params.tripId;
 
   if (!otp) {
     throw new AppError('OTP is required', 400);
   }
 
-  const trip = await Trip.findById(req.params.tripId);
+  const trip = await Trip.findById(tripId);
   if (!trip || trip.driver_id !== req.userId) {
     throw new AppError('Trip not found or unauthorized', 404);
   }
@@ -177,7 +179,19 @@ router.post('/trips/:tripId/start', asyncHandler(async (req, res) => {
     throw new AppError('Invalid OTP', 400);
   }
 
-  const updated = await Trip.updateStatus(req.params.tripId, 'in_progress');
+  // Update DB
+  const updated = await Trip.updateStatus(tripId, 'in_progress');
+
+  // 🟢 2. FIRE THE SOCKET EVENT USING YOUR SERVICE 🟢
+  try {
+    socketService.getIO().emit('trip_status_changed', {
+      tripId: tripId,
+      status: 'in_progress',
+      timestamp: new Date().toISOString()
+    });
+  } catch (err) {
+    console.error("Socket emit failed:", err);
+  }
 
   res.status(200).json({
     success: true,
@@ -189,8 +203,9 @@ router.post('/trips/:tripId/start', asyncHandler(async (req, res) => {
 // End trip
 router.post('/trips/:tripId/end', asyncHandler(async (req, res) => {
   const { actualDistance, actualDuration, finalPrice } = req.body;
+  const tripId = req.params.tripId; // Extracted for cleaner code
 
-  const trip = await Trip.findById(req.params.tripId);
+  const trip = await Trip.findById(tripId);
   if (!trip || trip.driver_id !== req.userId) {
     throw new AppError('Trip not found or unauthorized', 404);
   }
@@ -199,13 +214,27 @@ router.post('/trips/:tripId/end', asyncHandler(async (req, res) => {
     throw new AppError('Trip is not in progress', 400);
   }
 
+  // 1. Update the database
   const completed = await Trip.completeTrip(
-    req.params.tripId,
+    tripId,
     actualDistance,
     actualDuration,
     finalPrice || trip.total_price
   );
 
+  // 🟢 2. FIRE THE SOCKET EVENT 🟢
+  try {
+    socketService.getIO().emit('trip_status_changed', {
+      tripId: tripId,
+      status: 'completed', // Tells the frontend the ride is over
+      finalPrice: finalPrice || trip.total_price,
+      timestamp: new Date().toISOString()
+    });
+  } catch (err) {
+    console.error("Socket emit failed:", err);
+  }
+
+  // 3. Send response to driver
   res.status(200).json({
     success: true,
     message: 'Trip completed',
