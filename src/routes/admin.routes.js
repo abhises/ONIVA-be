@@ -479,6 +479,109 @@ router.post(
   }),
 );
 
+// Get active trips with stats (for Admin Live Dashboard)
+router.get(
+  "/trips/active",
+  asyncHandler(async (req, res) => {
+    const limit = req.query.limit ? parseInt(req.query.limit) : 20;
+    const offset = req.query.offset ? parseInt(req.query.offset) : 0;
+    const statusFilter = req.query.status || "all";
+
+    // 1. Map frontend simple statuses to DB statuses
+    const statusMapping = {
+      'scheduled': "('pending')",
+      'assigned': "('accepted', 'waiting_for_pickup')",
+      'started': "('in_progress')"
+    };
+
+    let dbStatusFilter = "t.status IN ('pending', 'accepted', 'waiting_for_pickup', 'in_progress')";
+    if (statusFilter !== "all" && statusMapping[statusFilter]) {
+      dbStatusFilter = `t.status IN ${statusMapping[statusFilter]}`;
+    }
+
+    // 2. Query to get formatted active trips (building nested JSON directly in Postgres)
+    const tripsQuery = `
+      SELECT 
+        t.id, 
+        CASE 
+          WHEN t.status = 'pending' THEN 'scheduled'
+          WHEN t.status IN ('accepted', 'waiting_for_pickup') THEN 'assigned'
+          WHEN t.status = 'in_progress' THEN 'started'
+        END as status,
+        t.pickup_address as "pickupAddress", 
+        t.destination_address as "dropoffAddress",
+        t.estimated_distance as distance, 
+        t.estimated_duration as duration, 
+        t.total_price as "totalPrice",
+        t.base_price as "baseFare", 
+        t.platform_commission as "distanceCharge", 
+        t.created_at as "createdAt",
+        
+        -- Build nested client object
+        json_build_object(
+          'id', c.id, 
+          'name', c.full_name, 
+          'phone', c.phone, 
+          'email', c.email, 
+          'rating', 5.0
+        ) as client,
+        
+        -- Build nested driver object if driver exists
+        CASE WHEN d.user_id IS NOT NULL THEN
+          json_build_object(
+            'id', d.user_id, 
+            'name', u_d.full_name, 
+            'phone', u_d.phone, 
+            'isOnline', d.is_online
+          )
+        ELSE NULL END as driver
+        
+      FROM trips t
+      JOIN users c ON t.client_id = c.id
+      LEFT JOIN drivers d ON t.driver_id = d.user_id
+      LEFT JOIN users u_d ON d.user_id = u_d.id
+      WHERE ${dbStatusFilter}
+      ORDER BY t.created_at DESC
+      LIMIT $1 OFFSET $2
+    `;
+
+    const tripsResult = await query(tripsQuery, [limit, offset]);
+
+    // 3. Query to calculate stats for the top cards
+    const statsQuery = `
+      SELECT 
+        COUNT(*) FILTER (WHERE status = 'pending') as scheduled,
+        COUNT(*) FILTER (WHERE status IN ('accepted', 'waiting_for_pickup')) as assigned,
+        COUNT(*) FILTER (WHERE status = 'in_progress') as started,
+        COUNT(*) as total
+      FROM trips
+      WHERE status IN ('pending', 'accepted', 'waiting_for_pickup', 'in_progress')
+    `;
+    const statsResult = await query(statsQuery);
+
+    // 4. Query to get total pagination count based on current filter
+    const totalFilteredQuery = await query(`SELECT COUNT(*) as total FROM trips t WHERE ${dbStatusFilter}`);
+    const totalFiltered = parseInt(totalFilteredQuery.rows[0].total);
+
+    res.status(200).json({
+      success: true,
+      data: tripsResult.rows,
+      stats: {
+        scheduled: parseInt(statsResult.rows[0].scheduled) || 0,
+        assigned: parseInt(statsResult.rows[0].assigned) || 0,
+        started: parseInt(statsResult.rows[0].started) || 0,
+        total: parseInt(statsResult.rows[0].total) || 0
+      },
+      pagination: {
+        limit,
+        offset,
+        total: totalFiltered,
+        hasMore: (offset + limit) < totalFiltered
+      }
+    });
+  })
+);
+
 
 
 
