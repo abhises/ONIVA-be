@@ -241,7 +241,7 @@ class Driver {
       );
     });
   }
-  static async getEarnings(driverId, startDate, endDate) {
+ static async getEarnings(driverId, startDate, endDate) {
     try {
       // 1. Get Summary Stats
       const summaryResult = await query(
@@ -251,7 +251,8 @@ class Driver {
         COALESCE(AVG(driver_earnings), 0)::float as "averagePerTrip"
        FROM trips
        WHERE driver_id = $1 AND status = 'completed' 
-       AND created_at BETWEEN $2 AND $3`,
+       -- FIX: Cast created_at to a DATE to ignore the hours/minutes/seconds
+       AND created_at::date BETWEEN $2 AND $3`,
         [driverId, startDate, endDate],
       );
 
@@ -260,7 +261,8 @@ class Driver {
         `SELECT SUM(driver_earnings)::float as amount
        FROM trips
        WHERE driver_id = $1 AND status = 'completed'
-       AND created_at BETWEEN $2 AND $3
+       -- FIX: Cast created_at to a DATE here as well
+       AND created_at::date BETWEEN $2 AND $3
        GROUP BY DATE_TRUNC('week', created_at)
        ORDER BY DATE_TRUNC('week', created_at) ASC`,
         [driverId, startDate, endDate],

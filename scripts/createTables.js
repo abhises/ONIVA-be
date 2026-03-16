@@ -3,12 +3,19 @@ const fs = require('fs');
 const path = require('path');
 const { Pool } = require('pg');
 
+// const pool = new Pool({
+//   host: process.env.DB_HOST,
+//   port: process.env.DB_PORT,
+//   user: process.env.DB_USER,
+//   password: process.env.DB_PASSWORD,
+//   database: process.env.DB_NAME,
+// });
+
 const pool = new Pool({
-  host: process.env.DB_HOST,
-  port: process.env.DB_PORT,
-  user: process.env.DB_USER,
-  password: process.env.DB_PASSWORD,
-  database: process.env.DB_NAME,
+  connectionString: process.env.DATABASE_URL,
+  ssl: {
+    rejectUnauthorized: false // Required for Neon to accept the connection
+  }
 });
 
 async function createTables() {
