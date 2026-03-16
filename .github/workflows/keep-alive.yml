@@ -14,5 +14,5 @@ jobs:
       - name: Ping API to wake Render and query Neon
         # Replace the URL below with your actual Render URL and a valid GET endpoint
         run: |
-          curl -s https://your-render-app-url.onrender.com/api/client/pricing/active > /dev/null
+          curl -s https://oniva.onrender.com/api/client/pricing/active > /dev/null
           echo "Ping successful!"
