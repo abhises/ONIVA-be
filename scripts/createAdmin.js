@@ -1,22 +1,33 @@
 require('dotenv').config();
 const { Pool } = require('pg');
-// Note: If you use 'bcryptjs' instead of 'bcrypt', change the require below
 const bcrypt = require('bcrypt'); 
 
-// const pool = new Pool({
-//   host: process.env.DB_HOST,
-//   port: process.env.DB_PORT,
-//   user: process.env.DB_USER,
-//   password: process.env.DB_PASSWORD,
-//   database: process.env.DB_NAME,
-// });
+let pool;
 
-const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-  ssl: {
-    rejectUnauthorized: false // Required for Neon to accept the connection
-  }
-});
+// Automatically switch database connections based on the environment
+switch (process.env.NODE_ENV) {
+  case 'production':
+    console.log('🔗 Connecting to Production (Neon DB)...');
+    pool = new Pool({
+      connectionString: process.env.DATABASE_URL,
+      ssl: {
+        rejectUnauthorized: false // Required for Neon
+      }
+    });
+    break;
+
+  case 'development':
+  default:
+    console.log('🔗 Connecting to Local Development Database...');
+    pool = new Pool({
+      host: process.env.DB_HOST,
+      port: process.env.DB_PORT,
+      user: process.env.DB_USER,
+      password: process.env.DB_PASSWORD,
+      database: process.env.DB_NAME,
+    });
+    break;
+}
 
 async function createAdminUser() {
   // 1. Define your admin credentials here

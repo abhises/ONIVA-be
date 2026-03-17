@@ -6,24 +6,33 @@
 const { Pool } = require('pg');
 const logger = require('../utils/logger');
 
-// const pool = new Pool({
-//   user: process.env.DB_USER || 'postgres',
-//   password: process.env.DB_PASSWORD || 'postgres',
-//   host: process.env.DB_HOST || 'localhost',
-//   port: process.env.DB_PORT || 5432,
-//   database: process.env.DB_NAME || 'oniva_db',
-//   max: 20,
-//   idleTimeoutMillis: 30000,
-//   connectionTimeoutMillis: 2000,
-// });
 
+let pool;
 
-const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-  ssl: {
-    rejectUnauthorized: false // Required for Neon to accept the connection
-  }
-});
+switch (process.env.NODE_ENV) {
+  case 'production':
+    console.log('🔗 Connecting to Production (Neon DB)...');
+    pool = new Pool({
+      connectionString: process.env.DATABASE_URL,
+      ssl: {
+        rejectUnauthorized: false // Required for Neon
+      }
+    });
+    break;
+
+  case 'development':
+  default:
+    console.log('🔗 Connecting to Local Development Database...');
+    pool = new Pool({
+      host: process.env.DB_HOST,
+      port: process.env.DB_PORT,
+      user: process.env.DB_USER,
+      password: process.env.DB_PASSWORD,
+      database: process.env.DB_NAME,
+    });
+    break;
+}
+
 
 pool.on('connect', () => {
   logger.info('New client connected to database pool');

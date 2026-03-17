@@ -3,20 +3,33 @@ const fs = require('fs');
 const path = require('path');
 const { Pool } = require('pg');
 
-// const pool = new Pool({
-//   host: process.env.DB_HOST,
-//   port: process.env.DB_PORT,
-//   user: process.env.DB_USER,
-//   password: process.env.DB_PASSWORD,
-//   database: process.env.DB_NAME,
-// });
 
-const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-  ssl: {
-    rejectUnauthorized: false // Required for Neon to accept the connection
-  }
-});
+let pool;
+
+switch (process.env.NODE_ENV) {
+  case 'production':
+    console.log('🔗 Connecting to Production (Neon DB)...');
+    pool = new Pool({
+      connectionString: process.env.DATABASE_URL,
+      ssl: {
+        rejectUnauthorized: false // Required for Neon
+      }
+    });
+    break;
+
+  case 'development':
+  default:
+    console.log('🔗 Connecting to Local Development Database...');
+    pool = new Pool({
+      host: process.env.DB_HOST,
+      port: process.env.DB_PORT,
+      user: process.env.DB_USER,
+      password: process.env.DB_PASSWORD,
+      database: process.env.DB_NAME,
+    });
+    break;
+}
+
 
 async function createTables() {
   try {
