@@ -106,6 +106,47 @@ class Trip {
     }
   }
 
+  static async startTrip(tripId) {
+    try {
+      // We update the status, set the OTP flag, AND record the start time
+      // all in a single, fast query!
+      const result = await query(
+        `UPDATE trips 
+         SET status = 'in_progress', 
+             otp_verified = true
+         WHERE id = $1
+         RETURNING *`,
+        [tripId]
+      );
+
+      return result.rows[0];
+    } catch (error) {
+      logger.error('Error starting trip:', error);
+      throw error;
+    }
+  }
+
+  static async otpVerifed(tripId, otp) {
+    try {
+      const result = await query(
+        `UPDATE trips SET otp_verified = true, otp_verified=true
+         WHERE id = $1 AND otp_code = $2
+         RETURNING *`,
+        [tripId, otp]
+      );
+
+      if (result.rows.length === 0) {
+        throw new Error('Invalid OTP or trip not found');
+      }
+
+      logger.info('OTP verified', { tripId });
+      return result.rows[0];
+    } catch (error) {
+      logger.error('Error verifying OTP:', error);
+      throw error;
+    }
+  }
+
   static async recordOTPVerification(tripId, otp) {
     try {
       const result = await query(

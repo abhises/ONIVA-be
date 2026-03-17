@@ -169,20 +169,21 @@ router.post('/trips/:tripId/start', asyncHandler(async (req, res) => {
     throw new AppError('OTP is required', 400);
   }
 
+  // 1. Fetch the trip to verify ownership and the OTP code
   const trip = await Trip.findById(tripId);
   if (!trip || trip.driver_id !== req.userId) {
     throw new AppError('Trip not found or unauthorized', 404);
   }
 
-  // Verify OTP
+  // 2. Verify OTP matches what the client gave the driver
   if (trip.otp_code !== otp) {
     throw new AppError('Invalid OTP', 400);
   }
 
-  // Update DB
-  const updated = await Trip.updateStatus(tripId, 'in_progress');
+  // 3. Perform all database updates in one shot
+  const updatedTrip = await Trip.startTrip(tripId);
 
-  // 🟢 2. FIRE THE SOCKET EVENT USING YOUR SERVICE 🟢
+  // 4. Fire the socket event to let the client know the ride has begun
   try {
     socketService.getIO().emit('trip_status_changed', {
       tripId: tripId,
@@ -193,10 +194,11 @@ router.post('/trips/:tripId/start', asyncHandler(async (req, res) => {
     console.error("Socket emit failed:", err);
   }
 
+  // 5. Return success!
   res.status(200).json({
     success: true,
-    message: 'Trip started',
-    data: updated
+    message: 'Trip started successfully',
+    data: updatedTrip
   });
 }));
 
