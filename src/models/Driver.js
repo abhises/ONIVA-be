@@ -7,44 +7,58 @@ const { query, transaction } = require("../config/database");
 const logger = require("../utils/logger");
 
 class Driver {
-  static async create(driverId, driverData) {
-    const {
-      nationalId,
-      drivingLicense,
-      licenseExpiry,
-      profilePhoto,
-      region,
-      vehicleInfo,
-    } = driverData;
+ static async create(driverId, driverData) {
+  const {
+    nationalId,          // The text ID number
+    drivingLicense,      // The text License number
+    nationalIdUrl,       // NEW: The Supabase URL for ID
+    drivingLicenseUrl,   // NEW: The Supabase URL for License
+    licenseExpiry,
+    profilePhoto,        // The Supabase URL for Photo
+    region,
+    vehicleInfo,
+  } = driverData;
 
-    return transaction(async (client) => {
-      try {
-        const result = await client.query(
-          `INSERT INTO drivers (
-            user_id, national_id, driving_license, license_expiry, 
-            profile_photo, region, vehicle_info, verification_status, created_at, updated_at
-          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW(), NOW())
-          RETURNING *`,
-          [
-            driverId,
-            nationalId,
-            drivingLicense,
-            licenseExpiry,
-            profilePhoto,
-            region,
-            JSON.stringify(vehicleInfo),
-            "pending",
-          ],
-        );
+  return transaction(async (client) => {
+    try {
+      const result = await client.query(
+        `INSERT INTO drivers (
+          user_id, 
+          national_id, 
+          driving_license, 
+          national_id_url,     -- Added
+          driving_license_url, -- Added
+          license_expiry, 
+          profile_photo, 
+          region, 
+          vehicle_info, 
+          verification_status, 
+          created_at, 
+          updated_at
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW(), NOW())
+        RETURNING *`,
+        [
+          driverId,
+          nationalId,
+          drivingLicense,
+          nationalIdUrl,       // New parameter
+          drivingLicenseUrl,    // New parameter
+          licenseExpiry,
+          profilePhoto,
+          region,
+          JSON.stringify(vehicleInfo),
+          "pending",
+        ],
+      );
 
-        logger.info("Driver profile created", { driverId, status: "pending" });
-        return result.rows[0];
-      } catch (error) {
-        logger.error("Error creating driver profile:", error);
-        throw error;
-      }
-    });
-  }
+      logger.info("Driver profile created", { driverId, status: "pending" });
+      return result.rows[0];
+    } catch (error) {
+      logger.error("Error creating driver profile:", error);
+      throw error;
+    }
+  });
+}
 
   static async getDashboardStats(driverId) {
     try {

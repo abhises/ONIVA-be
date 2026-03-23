@@ -14,23 +14,29 @@ const { authorize } = require('../middleware/auth');
 const socketService = require('../services/socket.service');
 
 // Create driver profile
+// Create driver profile
 router.post('/profile', asyncHandler(async (req, res) => {
   const {
     nationalId,
     drivingLicense,
+    nationalIdUrl,      // NEW: Added from Step 2 of frontend
+    drivingLicenseUrl,   // NEW: Added from Step 2 of frontend
     licenseExpiry,
     profilePhoto,
     region,
     vehicleInfo
   } = req.body;
 
-  if (!nationalId || !drivingLicense || !region || !vehicleInfo) {
-    throw new AppError('Missing required fields for driver profile', 400);
+  // Validate that we have the numbers AND the document links
+  if (!nationalId || !drivingLicense || !nationalIdUrl || !drivingLicenseUrl || !region || !vehicleInfo) {
+    throw new AppError('Missing required fields or document uploads', 400);
   }
 
   const profile = await Driver.create(req.userId, {
     nationalId,
     drivingLicense,
+    nationalIdUrl,     // Pass to model
+    drivingLicenseUrl,  // Pass to model
     licenseExpiry,
     profilePhoto,
     region,
