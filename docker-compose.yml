@@ -4,7 +4,7 @@ services:
   postgres:
     image: postgres:15-alpine
     container_name: oniva_postgres
-    restart: always
+    restart: "no"
     
     environment:
       POSTGRES_USER: ${DB_USER:-postgres}
@@ -45,7 +45,7 @@ services:
   pgadmin:
     image: dpage/pgadmin4:latest
     container_name: oniva_pgadmin
-    restart: always
+    restart: "no"
     
     environment:
       PGADMIN_DEFAULT_EMAIL: ${PGADMIN_EMAIL:-admin@oniva.com}

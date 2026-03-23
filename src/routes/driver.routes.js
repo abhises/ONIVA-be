@@ -301,4 +301,14 @@ router.get('/dashboard-stats', asyncHandler(async (req, res) => {
   });
 }));
 
+router.get('/checkDriverCreation', asyncHandler(async (req, res) => {
+  // Call the static method you just created in the Driver model
+  const result = await Driver.checkDriverCreation(req.userId);
+
+  res.status(200).json({
+    success: true,
+    status: result.status // returns 'none', 'pending', 'approved', etc.
+  });
+}));
+
 module.exports = router;

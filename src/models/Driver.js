@@ -241,7 +241,7 @@ class Driver {
       );
     });
   }
- static async getEarnings(driverId, startDate, endDate) {
+  static async getEarnings(driverId, startDate, endDate) {
     try {
       // 1. Get Summary Stats
       const summaryResult = await query(
@@ -303,6 +303,17 @@ class Driver {
         throw error;
       }
     });
+  }
+
+  // Add this to your Driver Model
+  static async checkDriverCreation(userId) {
+    const result = await query(
+      `SELECT verification_status FROM drivers WHERE user_id = $1`,
+      [userId],
+    );
+
+    if (result.rows.length === 0) return { status: "none" }; // No profile yet
+    return { status: result.rows[0].verification_status };
   }
 }
 
