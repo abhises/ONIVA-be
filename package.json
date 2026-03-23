@@ -7,7 +7,8 @@
     "start": "node src/server.js",
     "dev": "nodemon src/server.js",
     "createTable": "node scripts/createTables.js",
-    "createAdmin": "node scripts/createAdmin.js"
+    "createAdmin": "node scripts/createAdmin.js",
+    "runMigration": "node scripts/runMigrations.js"
   },
   "keywords": [],
   "author": "",
