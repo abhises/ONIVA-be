@@ -64,6 +64,17 @@ router.get('/profile', asyncHandler(async (req, res) => {
   });
 }));
 
+// Update driver profile
+router.put('/profile', asyncHandler(async (req, res) => {
+  await Driver.updateProfile(req.userId, req.body);
+  const updatedDriver = await Driver.findById(req.userId);
+  res.status(200).json({
+    success: true,
+    message: 'Driver profile updated',
+    data: updatedDriver
+  });
+}));
+
 // Update location (real-time)
 router.post('/location', asyncHandler(async (req, res) => {
   const { latitude, longitude } = req.body;

@@ -363,6 +363,80 @@ router.put(
   }),
 );
 
+// Summary Reports
+router.get(
+  "/reports/summary",
+  asyncHandler(async (req, res) => {
+    const { startDate, endDate } = req.query;
+
+    if (!startDate || !endDate) {
+      throw new AppError("startDate and endDate are required", 400);
+    }
+
+    const tripsResult = await query(
+      `
+      SELECT 
+        COUNT(*) as total_trips,
+        COALESCE(SUM(total_price), 0) as total_earnings,
+        COALESCE(SUM(platform_commission), 0) as platform_commission,
+        COALESCE(SUM(driver_earnings), 0) as driver_earnings,
+        COALESCE(AVG(total_price), 0) as average_fare,
+        COUNT(DISTINCT client_id) as active_users,
+        COUNT(DISTINCT driver_id) as active_drivers
+      FROM trips
+      WHERE status = 'completed' AND created_at::date >= $1 AND created_at::date <= $2
+      `,
+      [startDate, endDate]
+    );
+
+    const ratingsResult = await query(
+      `
+      SELECT COALESCE(AVG(rating), 0) as average_rating
+      FROM trip_ratings
+      WHERE created_at::date >= $1 AND created_at::date <= $2
+      `,
+      [startDate, endDate]
+    );
+
+    const newUsersResult = await query(
+      `
+      SELECT COUNT(*) as new_users
+      FROM users
+      WHERE role = 'client' AND created_at::date >= $1 AND created_at::date <= $2
+      `,
+      [startDate, endDate]
+    );
+
+    const newDriversResult = await query(
+      `
+      SELECT COUNT(*) as new_drivers
+      FROM users
+      WHERE role = 'driver' AND created_at::date >= $1 AND created_at::date <= $2
+      `,
+      [startDate, endDate]
+    );
+
+    const data = {
+      period: `${startDate} to ${endDate}`,
+      totalTrips: parseInt(tripsResult.rows[0].total_trips) || 0,
+      totalEarnings: parseFloat(tripsResult.rows[0].total_earnings) || 0,
+      platformCommission: parseFloat(tripsResult.rows[0].platform_commission) || 0,
+      driverEarnings: parseFloat(tripsResult.rows[0].driver_earnings) || 0,
+      averageFare: parseFloat(tripsResult.rows[0].average_fare) || 0,
+      averageRating: parseFloat(ratingsResult.rows[0].average_rating) || 0,
+      activeUsers: parseInt(tripsResult.rows[0].active_users) || 0,
+      activeDrivers: parseInt(tripsResult.rows[0].active_drivers) || 0,
+      newUsers: parseInt(newUsersResult.rows[0].new_users) || 0,
+      newDrivers: parseInt(newDriversResult.rows[0].new_drivers) || 0,
+    };
+
+    res.status(200).json({
+      success: true,
+      data
+    });
+  }),
+);
+
 // Revenue reports
 router.get(
   "/reports/revenue",
@@ -491,10 +565,11 @@ router.get(
     const statusMapping = {
       'scheduled': "('pending')",
       'assigned': "('accepted', 'waiting_for_pickup')",
-      'started': "('in_progress')"
+      'started': "('in_progress')",
+      'completed': "('completed')"
     };
 
-    let dbStatusFilter = "t.status IN ('pending', 'accepted', 'waiting_for_pickup', 'in_progress')";
+    let dbStatusFilter = "t.status IN ('pending', 'accepted', 'waiting_for_pickup', 'in_progress', 'completed', 'cancelled')";
     if (statusFilter !== "all" && statusMapping[statusFilter]) {
       dbStatusFilter = `t.status IN ${statusMapping[statusFilter]}`;
     }
@@ -507,6 +582,8 @@ router.get(
           WHEN t.status = 'pending' THEN 'scheduled'
           WHEN t.status IN ('accepted', 'waiting_for_pickup') THEN 'assigned'
           WHEN t.status = 'in_progress' THEN 'started'
+          WHEN t.status = 'completed' THEN 'completed'
+          WHEN t.status = 'cancelled' THEN 'cancelled'
         END as status,
         t.pickup_address as "pickupAddress", 
         t.destination_address as "dropoffAddress",
@@ -553,9 +630,10 @@ router.get(
         COUNT(*) FILTER (WHERE status = 'pending') as scheduled,
         COUNT(*) FILTER (WHERE status IN ('accepted', 'waiting_for_pickup')) as assigned,
         COUNT(*) FILTER (WHERE status = 'in_progress') as started,
+        COUNT(*) FILTER (WHERE status = 'completed') as completed,
         COUNT(*) as total
       FROM trips
-      WHERE status IN ('pending', 'accepted', 'waiting_for_pickup', 'in_progress')
+      WHERE status IN ('pending', 'accepted', 'waiting_for_pickup', 'in_progress', 'completed', 'cancelled')
     `;
     const statsResult = await query(statsQuery);
 
@@ -570,6 +648,7 @@ router.get(
         scheduled: parseInt(statsResult.rows[0].scheduled) || 0,
         assigned: parseInt(statsResult.rows[0].assigned) || 0,
         started: parseInt(statsResult.rows[0].started) || 0,
+        completed: parseInt(statsResult.rows[0].completed) || 0,
         total: parseInt(statsResult.rows[0].total) || 0
       },
       pagination: {

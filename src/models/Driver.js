@@ -60,6 +60,68 @@ class Driver {
   });
 }
 
+  static async updateProfile(driverId, updates) {
+    const {
+      nationalId,
+      drivingLicense,
+      nationalIdUrl,
+      drivingLicenseUrl,
+      licenseExpiry,
+      profilePhoto,
+      region,
+      vehicleInfo,
+      fullName,
+      phone
+    } = updates;
+
+    return transaction(async (client) => {
+      try {
+        const driverFields = [];
+        const driverValues = [];
+        let paramCount = 1;
+
+        if (nationalId !== undefined) { driverFields.push(`national_id = $${paramCount++}`); driverValues.push(nationalId); }
+        if (drivingLicense !== undefined) { driverFields.push(`driving_license = $${paramCount++}`); driverValues.push(drivingLicense); }
+        if (nationalIdUrl !== undefined) { driverFields.push(`national_id_url = $${paramCount++}`); driverValues.push(nationalIdUrl); }
+        if (drivingLicenseUrl !== undefined) { driverFields.push(`driving_license_url = $${paramCount++}`); driverValues.push(drivingLicenseUrl); }
+        if (licenseExpiry !== undefined) { driverFields.push(`license_expiry = $${paramCount++}`); driverValues.push(licenseExpiry); }
+        if (profilePhoto !== undefined) { driverFields.push(`profile_photo = $${paramCount++}`); driverValues.push(profilePhoto); }
+        if (region !== undefined) { driverFields.push(`region = $${paramCount++}`); driverValues.push(region); }
+        if (vehicleInfo !== undefined) { driverFields.push(`vehicle_info = $${paramCount++}`); driverValues.push(JSON.stringify(vehicleInfo)); }
+
+        if (driverFields.length > 0) {
+          driverFields.push(`updated_at = NOW()`);
+          driverValues.push(driverId);
+          await client.query(
+            `UPDATE drivers SET ${driverFields.join(', ')} WHERE user_id = $${paramCount}`,
+            driverValues
+          );
+        }
+
+        const userFields = [];
+        const userValues = [];
+        let userParamCount = 1;
+
+        if (fullName !== undefined) { userFields.push(`full_name = $${userParamCount++}`); userValues.push(fullName); }
+        if (phone !== undefined) { userFields.push(`phone = $${userParamCount++}`); userValues.push(phone); }
+
+        if (userFields.length > 0) {
+          userFields.push(`updated_at = NOW()`);
+          userValues.push(driverId);
+          await client.query(
+            `UPDATE users SET ${userFields.join(', ')} WHERE id = $${userParamCount}`,
+            userValues
+          );
+        }
+
+        return true;
+      } catch (error) {
+        logger.error("Error updating driver profile:", error);
+        throw error;
+      }
+    });
+  }
+
   static async getDashboardStats(driverId) {
     try {
       const result = await query(
