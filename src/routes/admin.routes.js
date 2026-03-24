@@ -66,7 +66,12 @@ router.get(
         -- today's revenue
         (SELECT COALESCE(SUM(total_price), 0) 
          FROM trips 
-         WHERE DATE(created_at) = CURRENT_DATE) AS todays_revenue
+         WHERE DATE(created_at) = CURRENT_DATE) AS todays_revenue,
+
+        -- active trips
+        (SELECT COUNT(*) 
+         FROM trips 
+         WHERE status IN ('pending', 'accepted', 'waiting_for_pickup', 'in_progress')) AS active_trips
     `);
 
     res.status(200).json({
@@ -501,6 +506,75 @@ router.get(
   }),
 );
 
+
+// Admin Earnings
+router.get(
+  "/earnings",
+  asyncHandler(async (req, res) => {
+    const { startDate, endDate } = req.query;
+
+    if (!startDate || !endDate) {
+      throw new AppError("startDate and endDate are required", 400);
+    }
+
+    const summaryResult = await query(
+      `
+      SELECT 
+        COUNT(*) as total_trips,
+        COALESCE(SUM(total_price), 0) as total_platform_earnings,
+        COALESCE(SUM(driver_earnings), 0) as total_driver_earnings,
+        COALESCE(SUM(platform_commission), 0) as total_commission,
+        COALESCE(AVG(platform_commission), 0) as average_commission_per_trip
+      FROM trips
+      WHERE status = 'completed' AND created_at::date >= $1 AND created_at::date <= $2
+      `,
+      [startDate, endDate]
+    );
+
+    const monthlyResult = await query(
+      `
+      SELECT 
+        TO_CHAR(DATE_TRUNC('month', created_at), 'FMMonth') as month,
+        DATE_TRUNC('month', created_at) as month_val,
+        COALESCE(SUM(total_price), 0) as platform_earnings,
+        COALESCE(SUM(driver_earnings), 0) as driver_earnings,
+        COALESCE(SUM(platform_commission), 0) as commission
+      FROM trips
+      WHERE status = 'completed' AND created_at::date >= $1 AND created_at::date <= $2
+      GROUP BY DATE_TRUNC('month', created_at)
+      ORDER BY month_val ASC
+      `,
+      [startDate, endDate]
+    );
+
+    const s = summaryResult.rows[0];
+    const totalPlatformEarnings = parseFloat(s.total_platform_earnings) || 0;
+    const totalCommission = parseFloat(s.total_commission) || 0;
+    
+    // Calculate effective commission rate, default to 25 if no trips
+    const commissionPercentage = totalPlatformEarnings > 0 ? Math.round((totalCommission / totalPlatformEarnings) * 100) : 25;
+
+    const data = {
+      totalTrips: parseInt(s.total_trips) || 0,
+      totalPlatformEarnings: totalPlatformEarnings,
+      totalDriverEarnings: parseFloat(s.total_driver_earnings) || 0,
+      totalCommission: totalCommission,
+      commissionPercentage: commissionPercentage,
+      averageCommissionPerTrip: Math.round(parseFloat(s.average_commission_per_trip)) || 0,
+      monthlyData: monthlyResult.rows.map(row => ({
+        month: row.month.trim(),
+        platformEarnings: parseFloat(row.platform_earnings) || 0,
+        driverEarnings: parseFloat(row.driver_earnings) || 0,
+        commission: parseFloat(row.commission) || 0
+      }))
+    };
+
+    res.status(200).json({
+      success: true,
+      data
+    });
+  }),
+);
 
 // User management
 router.get(
