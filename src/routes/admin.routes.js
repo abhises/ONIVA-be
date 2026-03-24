@@ -269,7 +269,7 @@ router.get(
 // );
 
 // Get trip details
-router.get('/:id', asyncHandler(async (req, res) => {
+router.get('/:id', asyncHandler(async (req, res, next) => {
   const tripId = req.params.id; // or req.params.tripId
   
   // ADD THIS CHECK:
