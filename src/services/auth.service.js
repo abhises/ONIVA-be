@@ -15,8 +15,9 @@ class AuthService {
     const payload = {
       id: user.id,
       phone: user.phone,
+      fullName: user.full_name || user.fullName,
       role: user.role,
-      language: user.language
+      language: user.language,
     };
 
     const token = jwt.sign(payload, JWT_SECRET, { expiresIn: JWT_EXPIRY });
