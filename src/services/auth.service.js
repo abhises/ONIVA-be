@@ -181,6 +181,53 @@ class AuthService {
       throw error;
     }
   }
+
+  static async sendPasswordResetOTP(phone) {
+    try {
+      const user = await User.findByPhone(phone);
+      if (!user) {
+        throw new Error('User not found');
+      }
+
+      const otp = Math.floor(100000 + Math.random() * 900000).toString();
+      const expiry = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes expiry
+
+      await User.setResetOTP(phone, otp, expiry);
+      logger.info('Password reset OTP generated', { phone, otp });
+
+      // In production, send via SMS
+      // await SMSService.send(phone, `Your ONIVA password reset OTP is: ${otp}`);
+
+      return {
+        success: true,
+        message: 'Password reset code sent',
+        otp // Remove in production
+      };
+    } catch (error) {
+      logger.error('Forgot password failed:', error.message);
+      throw error;
+    }
+  }
+
+  static async resetPassword(phone, otp, newPassword) {
+    try {
+      const user = await User.verifyResetOTP(phone, otp);
+      if (!user) {
+        throw new Error('Invalid or expired OTP');
+      }
+
+      await User.resetPassword(user.id, newPassword);
+      logger.info('Password reset successful', { phone });
+
+      return {
+        success: true,
+        message: 'Password reset successfully'
+      };
+    } catch (error) {
+      logger.error('Reset password failed:', error.message);
+      throw error;
+    }
+  }
 }
 
 module.exports = AuthService;

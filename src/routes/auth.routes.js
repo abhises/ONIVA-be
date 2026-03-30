@@ -251,4 +251,48 @@ router.post(
   }),
 );
 
+// Forgot password (send OTP)
+router.post(
+  "/forgot-password",
+  asyncHandler(async (req, res) => {
+    const { phone } = req.body;
+
+    if (!phone) {
+      throw new AppError("Phone number is required", 400);
+    }
+
+    const result = await AuthService.sendPasswordResetOTP(phone);
+
+    res.status(200).json({
+      success: true,
+      message: result.message,
+      data: result,
+    });
+  }),
+);
+
+// Reset password (verify OTP and set new password)
+router.post(
+  "/reset-password",
+  asyncHandler(async (req, res) => {
+    const { phone, otp, newPassword } = req.body;
+
+    if (!phone || !otp || !newPassword) {
+      throw new AppError("Phone, OTP, and new password are required", 400);
+    }
+
+    if (newPassword.length < 6) {
+      throw new AppError("New password must be at least 6 characters", 400);
+    }
+
+    const result = await AuthService.resetPassword(phone, otp, newPassword);
+
+    res.status(200).json({
+      success: true,
+      message: result.message,
+      data: result,
+    });
+  }),
+);
+
 module.exports = router;

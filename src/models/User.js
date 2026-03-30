@@ -146,6 +146,46 @@ class User {
       throw error;
     }
   }
+
+  static async setResetOTP(phone, otp, expiry) {
+    try {
+      await query(
+        'UPDATE users SET reset_otp = $1, reset_otp_expires_at = $2 WHERE phone = $3',
+        [otp, expiry, phone]
+      );
+      return true;
+    } catch (error) {
+      logger.error('Error setting reset OTP:', error);
+      throw error;
+    }
+  }
+
+  static async verifyResetOTP(phone, otp) {
+    try {
+      const result = await query(
+        'SELECT id FROM users WHERE phone = $1 AND reset_otp = $2 AND reset_otp_expires_at > NOW()',
+        [phone, otp]
+      );
+      return result.rows[0] || null;
+    } catch (error) {
+      logger.error('Error verifying reset OTP:', error);
+      throw error;
+    }
+  }
+
+  static async resetPassword(userId, newPassword) {
+    try {
+      const hashedPassword = await bcrypt.hash(newPassword, 10);
+      await query(
+        'UPDATE users SET password_hash = $1, reset_otp = NULL, reset_otp_expires_at = NULL, updated_at = NOW() WHERE id = $2',
+        [hashedPassword, userId]
+      );
+      return true;
+    } catch (error) {
+      logger.error('Error resetting password:', error);
+      throw error;
+    }
+  }
 }
 
 module.exports = User;
