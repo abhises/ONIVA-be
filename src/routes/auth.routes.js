@@ -47,10 +47,11 @@ router.post(
       language,
     );
 
+    const isProd = process.env.NODE_ENV === 'production';
     const cookieOptions = {
       httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: process.env.COOKIE_SAMESITE || 'lax',
+      secure: isProd,
+      sameSite: isProd ? 'none' : 'lax', // Use 'none' for cross-site cookies in production
       path: "/",
       maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
     };
@@ -79,10 +80,11 @@ router.post(
 
     const result = await AuthService.login(phone, password);
 
+    const isProd = process.env.NODE_ENV === 'production';
     const cookieOptions = {
       httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: process.env.COOKIE_SAMESITE || 'lax',
+      secure: isProd,
+      sameSite: isProd ? 'none' : 'lax',
       path: "/",
       maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
     };
@@ -102,10 +104,11 @@ router.post(
 router.post(
   "/logout",
   asyncHandler(async (req, res) => {
+    const isProd = process.env.NODE_ENV === 'production';
     res.clearCookie("token", {
       httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: process.env.COOKIE_SAMESITE || 'lax',
+      secure: isProd,
+      sameSite: isProd ? 'none' : 'lax',
       path: "/",
     });
     res.status(200).json({
@@ -140,10 +143,11 @@ router.post(
 
     const result = await AuthService.refreshToken(token);
 
+    const isProd = process.env.NODE_ENV === 'production';
     const cookieOptions = {
       httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: process.env.COOKIE_SAMESITE || 'lax',
+      secure: isProd,
+      sameSite: isProd ? 'none' : 'lax',
       path: "/",
       maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
     };
