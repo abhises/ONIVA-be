@@ -47,13 +47,15 @@ router.post(
       language,
     );
 
-    res.cookie("token", result.token, {
+    const cookieOptions = {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
-      sameSite: process.env.NODE_ENV === 'production' ? "none" : "lax",
-      maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+      sameSite: process.env.COOKIE_SAMESITE || 'lax',
       path: "/",
-    });
+      maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+    };
+
+    res.cookie("token", result.token, cookieOptions);
 
     res.status(201).json({
       success: true,
@@ -77,13 +79,15 @@ router.post(
 
     const result = await AuthService.login(phone, password);
 
-    res.cookie("token", result.token, {
+    const cookieOptions = {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
-      sameSite: process.env.NODE_ENV === 'production' ? "none" : "lax",
-      maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+      sameSite: process.env.COOKIE_SAMESITE || 'lax',
       path: "/",
-    });
+      maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+    };
+
+    res.cookie("token", result.token, cookieOptions);
     res.status(200).json({
       success: true,
       message: "Login successful",
@@ -101,7 +105,7 @@ router.post(
     res.clearCookie("token", {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
-      sameSite: process.env.NODE_ENV === 'production' ? "none" : "lax",
+      sameSite: process.env.COOKIE_SAMESITE || 'lax',
       path: "/",
     });
     res.status(200).json({
@@ -136,13 +140,15 @@ router.post(
 
     const result = await AuthService.refreshToken(token);
 
-    res.cookie("token", result.token, {
+    const cookieOptions = {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
-      sameSite: process.env.NODE_ENV === 'production' ? "none" : "lax",
-      maxAge: 7 * 24 * 60 * 60 * 1000,
+      sameSite: process.env.COOKIE_SAMESITE || 'lax',
       path: "/",
-    });
+      maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+    };
+
+    res.cookie("token", result.token, cookieOptions);
 
     res.status(200).json({
       success: true,

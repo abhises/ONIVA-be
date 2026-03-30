@@ -30,23 +30,29 @@ const { authenticate } = require('./middleware/auth');
 // Initialize Express app
 const app = express();
 
+// Trust proxy for secure cookies behind reverse proxies
+app.set('trust proxy', 1);
+
 // Middleware
 app.use(helmet());
 
 const rawCorsOrigin = process.env.CORS_ORIGIN || 'http://localhost:3000';
-const allowedOrigins = rawCorsOrigin === '*'
-  ? ['http://localhost:3000']
-  : rawCorsOrigin.split(',').map((origin) => origin.trim());
+const allowedOrigins = rawCorsOrigin.split(',').map((origin) => origin.trim());
 
 app.use(cors({
   origin: (origin, callback) => {
-    if (!origin) {
-      // Allow same-origin or server-to-server requests.
+    // Allow requests with no origin (like mobile apps or curl)
+    if (!origin) return callback(null, true);
+    
+    if (rawCorsOrigin === '*' || allowedOrigins.includes(origin)) {
       return callback(null, true);
     }
-    if (allowedOrigins.includes(origin)) {
+    
+    // In development, be more lenient if no origin is specified in ENV
+    if (process.env.NODE_ENV !== 'production' && !process.env.CORS_ORIGIN) {
       return callback(null, true);
     }
+
     return callback(new Error(`CORS origin denied: ${origin}`));
   },
   credentials: true,
