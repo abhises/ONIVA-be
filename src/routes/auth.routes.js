@@ -47,10 +47,19 @@ router.post(
       language,
     );
 
+    res.cookie("token", result.token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: "lax",
+      maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+    });
+
     res.status(201).json({
       success: true,
       message: "User registered successfully",
-      data: result,
+      data: {
+        user: result.user,
+      },
     });
   }),
 );
@@ -69,14 +78,33 @@ router.post(
 
     res.cookie("token", result.token, {
       httpOnly: true,
-      secure: false, // true in production (HTTPS)
+      secure: process.env.NODE_ENV === 'production',
       sameSite: "lax",
       maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
     });
     res.status(200).json({
       success: true,
       message: "Login successful",
-      data: result,
+      data: {
+        user: result.user,
+      },
+    });
+  }),
+);
+
+// Logout user
+router.post(
+  "/logout",
+  asyncHandler(async (req, res) => {
+    res.clearCookie("token", {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: "lax",
+      path: "/",
+    });
+    res.status(200).json({
+      success: true,
+      message: "Logout successful",
     });
   }),
 );

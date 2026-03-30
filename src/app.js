@@ -32,10 +32,25 @@ const app = express();
 
 // Middleware
 app.use(helmet());
-  app.use(cors({
-    origin: process.env.CORS_ORIGIN || '*',
-    credentials: true
-  }));
+
+const rawCorsOrigin = process.env.CORS_ORIGIN || 'http://localhost:3000';
+const allowedOrigins = rawCorsOrigin === '*'
+  ? ['http://localhost:3000']
+  : rawCorsOrigin.split(',').map((origin) => origin.trim());
+
+app.use(cors({
+  origin: (origin, callback) => {
+    if (!origin) {
+      // Allow same-origin or server-to-server requests.
+      return callback(null, true);
+    }
+    if (allowedOrigins.includes(origin)) {
+      return callback(null, true);
+    }
+    return callback(new Error(`CORS origin denied: ${origin}`));
+  },
+  credentials: true,
+}));
 app.use(morgan('combined'));
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ limit: '10mb', extended: true }));
