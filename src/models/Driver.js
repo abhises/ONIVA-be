@@ -133,6 +133,7 @@ class Driver {
         -- Lifetime stats
         (SELECT COUNT(*) FROM trips WHERE driver_id = $1 AND status = 'completed') as total_trips,
         (SELECT COALESCE(SUM(driver_earnings), 0) FROM trips WHERE driver_id = $1 AND status = 'completed') as total_earnings,
+        (SELECT COALESCE(SUM(actual_distance), 0) FROM trips WHERE driver_id = $1 AND status = 'completed') as total_km,
         
         -- Weekly trend (last 7 days)
         (SELECT COUNT(*) FROM trips 
