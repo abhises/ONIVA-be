@@ -162,19 +162,19 @@ router.post('/:tripId/report', asyncHandler(async (req, res) => {
     throw new AppError('Trip not found', 404);
   }
 
-  // TODO: Save report to database
-  // await TripReport.create({
-  //   tripId: trip.id,
-  //   reportedBy: req.userId,
-  //   type,
-  //   description,
-  //   images,
-  //   status: 'open'
-  // });
+  // Create trip report record
+  const report = await Trip.createReport(
+    trip.id,
+    req.userId,
+    type,
+    description,
+    images || []
+  );
 
   res.status(201).json({
     success: true,
-    message: 'Report submitted successfully. Our team will review it.'
+    message: 'Report submitted successfully. Our team will review it.',
+    data: report
   });
 }));
 

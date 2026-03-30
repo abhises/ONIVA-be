@@ -506,6 +506,58 @@ router.get(
   }),
 );
 
+// Incident management
+router.get(
+  "/incidents",
+  asyncHandler(async (req, res) => {
+    const status = req.query.status || 'all';
+    const tripId = req.query.tripId || null;
+    const limit = req.query.limit ? parseInt(req.query.limit) : 50;
+    const offset = req.query.offset ? parseInt(req.query.offset) : 0;
+
+    const incidents = await Trip.getReports(status, limit, offset, tripId);
+    res.status(200).json({ success: true, data: incidents });
+  }),
+);
+
+router.get(
+  "/incidents/:id",
+  asyncHandler(async (req, res) => {
+    const incident = await Trip.getReportById(req.params.id);
+    if (!incident) {
+      throw new AppError('Incident not found', 404);
+    }
+    res.status(200).json({ success: true, data: incident });
+  }),
+);
+
+router.put(
+  "/incidents/:id",
+  asyncHandler(async (req, res) => {
+    const { status, resolutionNote, action } = req.body;
+    const validStatuses = ['open', 'investigating', 'resolved', 'closed', 'suspended'];
+
+    if (!status || !validStatuses.includes(status)) {
+      throw new AppError('Invalid incident status', 400);
+    }
+
+    const incident = await Trip.getReportById(req.params.id);
+    if (!incident) {
+      throw new AppError('Incident not found', 404);
+    }
+
+    const updatedIncident = await Trip.updateReportStatus(req.params.id, status, resolutionNote);
+
+    if (status === 'suspended' || action === 'suspend_driver') {
+      const driverId = incident.driver_id;
+      if (driverId) {
+        await Driver.suspend(driverId, resolutionNote || 'Suspended via incident workflow');
+      }
+    }
+
+    res.status(200).json({ success: true, message: 'Incident updated', data: updatedIncident });
+  }),
+);
 
 // Admin Earnings
 router.get(
@@ -667,6 +719,12 @@ router.get(
         t.base_price as "baseFare", 
         t.platform_commission as "distanceCharge", 
         t.created_at as "createdAt",
+        d.current_latitude as driverLatitude,
+        d.current_longitude as driverLongitude,
+        t.pickup_latitude as pickupLatitude,
+        t.pickup_longitude as pickupLongitude,
+        t.destination_latitude as destinationLatitude,
+        t.destination_longitude as destinationLongitude,
         
         -- Build nested client object
         json_build_object(
@@ -683,7 +741,8 @@ router.get(
             'id', d.user_id, 
             'name', u_d.full_name, 
             'phone', u_d.phone, 
-            'isOnline', d.is_online
+            'isOnline', d.is_online,
+            'location', json_build_object('latitude', d.current_latitude, 'longitude', d.current_longitude)
           )
         ELSE NULL END as driver
         

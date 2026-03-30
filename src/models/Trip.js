@@ -56,39 +56,39 @@ class Trip {
     });
   }
 
- static async findById(tripId) {
-  try {
-    const result = await query(
-      `SELECT t.*, 
-              c.full_name as client_name, c.phone as client_phone,
-              u_d.full_name as driver_name, u_d.phone as driver_phone,
-              d.vehicle_info, d.profile_photo as driver_photo, d.rating as driver_avg_rating,
-              tr.rating as rating_value, 
-              tr.review as rating_review, 
-              tr.created_at as rating_created_at
-       FROM trips t
-       JOIN users c ON t.client_id = c.id
-       LEFT JOIN drivers d ON t.driver_id = d.user_id
-       LEFT JOIN users u_d ON d.user_id = u_d.id
-       LEFT JOIN trip_ratings tr ON t.id = tr.trip_id
-       WHERE t.id = $1`,
-      [tripId]
-    );
+  static async findById(tripId) {
+    try {
+      const result = await query(
+        `SELECT t.*, 
+                c.full_name as client_name, c.phone as client_phone,
+                u_d.full_name as driver_name, u_d.phone as driver_phone,
+                d.vehicle_info, d.profile_photo as driver_photo, d.rating as driver_avg_rating,
+                tr.rating as rating_value, 
+                tr.review as rating_review, 
+                tr.created_at as rating_created_at
+         FROM trips t
+         JOIN users c ON t.client_id = c.id
+         LEFT JOIN drivers d ON t.driver_id = d.user_id
+         LEFT JOIN users u_d ON d.user_id = u_d.id
+         LEFT JOIN trip_ratings tr ON t.id = tr.trip_id
+         WHERE t.id = $1`,
+        [tripId]
+      );
 
-    const trip = result.rows[0];
-    if (trip && trip.rating_value) {
-      trip.rating = {
-        rating: trip.rating_value,
-        review: trip.rating_review,
-        created_at: trip.rating_created_at
-      };
+      const trip = result.rows[0];
+      if (trip && trip.rating_value) {
+        trip.rating = {
+          rating: trip.rating_value,
+          review: trip.rating_review,
+          created_at: trip.rating_created_at
+        };
+      }
+      return trip || null;
+    } catch (error) {
+      logger.error('Error finding trip:', error);
+      throw error;
     }
-    return trip || null;
-  } catch (error) {
-    logger.error('Error finding trip:', error);
-    throw error;
   }
-}
 
   static async updateStatus(tripId, status) {
     try {
@@ -108,12 +108,11 @@ class Trip {
 
   static async startTrip(tripId) {
     try {
-      // We update the status, set the OTP flag, AND record the start time
-      // all in a single, fast query!
       const result = await query(
         `UPDATE trips 
          SET status = 'in_progress', 
-             otp_verified = true
+             otp_verified = true,
+             updated_at = NOW()
          WHERE id = $1
          RETURNING *`,
         [tripId]
@@ -126,10 +125,17 @@ class Trip {
     }
   }
 
-  static async otpVerifed(tripId, otp) {
+  /**
+   * Verified OTP and moves trip to in_progress status
+   */
+  static async verifyOTP(tripId, otp) {
     try {
       const result = await query(
-        `UPDATE trips SET otp_verified = true, otp_verified=true
+        `UPDATE trips 
+         SET otp_verified = true, 
+             otp_verified_at = NOW(), 
+             status = 'in_progress',
+             updated_at = NOW()
          WHERE id = $1 AND otp_code = $2
          RETURNING *`,
         [tripId, otp]
@@ -139,28 +145,7 @@ class Trip {
         throw new Error('Invalid OTP or trip not found');
       }
 
-      logger.info('OTP verified', { tripId });
-      return result.rows[0];
-    } catch (error) {
-      logger.error('Error verifying OTP:', error);
-      throw error;
-    }
-  }
-
-  static async recordOTPVerification(tripId, otp) {
-    try {
-      const result = await query(
-        `UPDATE trips SET otp_verified = true, otp_verified_at = NOW(), status = 'in_progress'
-         WHERE id = $1 AND otp_code = $2
-         RETURNING *`,
-        [tripId, otp]
-      );
-
-      if (result.rows.length === 0) {
-        throw new Error('Invalid OTP or trip not found');
-      }
-
-      logger.info('OTP verified', { tripId });
+      logger.info('OTP verified and trip started', { tripId });
       return result.rows[0];
     } catch (error) {
       logger.error('Error verifying OTP:', error);
@@ -257,7 +242,7 @@ class Trip {
     }
   }
 
- static async findActiveByDriverId(driverId) {
+  static async findActiveByDriverId(driverId) {
     try {
       const result = await query(
         `SELECT t.*, 
@@ -282,7 +267,7 @@ class Trip {
       const otp = Math.floor(100000 + Math.random() * 900000).toString();
       
       await query(
-        `UPDATE trips SET otp_code = $1 WHERE id = $2`,
+        `UPDATE trips SET otp_code = $1, updated_at = NOW() WHERE id = $2`,
         [otp, tripId]
       );
 
@@ -294,10 +279,92 @@ class Trip {
     }
   }
 
+  static async createReport(tripId, reportedBy, type, description, images = []) {
+    try {
+      const result = await query(
+        `INSERT INTO trip_reports (trip_id, reported_by, type, description, images, status, created_at, updated_at)
+         VALUES ($1, $2, $3, $4, $5, 'open', NOW(), NOW())
+         RETURNING *`,
+        [tripId, reportedBy, type, description, images]
+      );
+      logger.info('Trip report created', { tripId, reportId: result.rows[0].id, reportedBy });
+      return result.rows[0];
+    } catch (error) {
+      logger.error('Error creating trip report:', error);
+      throw error;
+    }
+  }
 
-  
+  static async getReports(status = 'all', limit = 50, offset = 0, tripId = null) {
+    try {
+      let queryText = `SELECT tr.*, t.driver_id, t.client_id, u.full_name as client_name, d.full_name as driver_name
+                       FROM trip_reports tr
+                       LEFT JOIN trips t ON tr.trip_id = t.id
+                       LEFT JOIN users u ON t.client_id = u.id
+                       LEFT JOIN users d ON t.driver_id = d.id`;
+      const params = [];
+      const whereClauses = [];
 
- 
+      if (status !== 'all') {
+        params.push(status);
+        whereClauses.push(`tr.status = $${params.length}`);
+      }
+      if (tripId) {
+        params.push(tripId);
+        whereClauses.push(`t.id = $${params.length}`);
+      }
+
+      if (whereClauses.length > 0) {
+        queryText += ` WHERE ${whereClauses.join(' AND ')}`;
+      }
+
+      params.push(limit, offset);
+      queryText += ` ORDER BY tr.created_at DESC LIMIT $${params.length - 1} OFFSET $${params.length}`;
+
+      const result = await query(queryText, params);
+      return result.rows;
+    } catch (error) {
+      logger.error('Error fetching trip reports:', error);
+      throw error;
+    }
+  }
+
+  static async getReportById(reportId) {
+    try {
+      const result = await query(
+        `SELECT tr.*, t.driver_id, t.client_id, u.full_name as client_name, d.full_name as driver_name
+         FROM trip_reports tr
+         LEFT JOIN trips t ON tr.trip_id = t.id
+         LEFT JOIN users u ON t.client_id = u.id
+         LEFT JOIN users d ON t.driver_id = d.id
+         WHERE tr.id = $1`,
+        [reportId]
+      );
+      return result.rows[0] || null;
+    } catch (error) {
+      logger.error('Error finding trip report by id:', error);
+      throw error;
+    }
+  }
+
+  static async updateReportStatus(reportId, status, resolutionNote = null) {
+    try {
+      const result = await query(
+        `UPDATE trip_reports
+         SET status = $1,
+             resolution_note = $2,
+             updated_at = NOW()
+         WHERE id = $3
+         RETURNING *`,
+        [status, resolutionNote, reportId]
+      );
+      logger.info('Trip report status updated', { reportId, status });
+      return result.rows[0] || null;
+    } catch (error) {
+      logger.error('Error updating trip report status:', error);
+      throw error;
+    }
+  }
 }
 
 module.exports = Trip;
