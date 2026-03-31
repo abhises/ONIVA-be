@@ -224,6 +224,28 @@ class Trip {
     }
   }
 
+  static async getClientDashboardStats(clientId) {
+    try {
+      const result = await query(
+        `SELECT 
+          COUNT(*) as total_rides,
+          COALESCE(SUM(COALESCE(actual_distance, estimated_distance)), 0) as total_distance
+         FROM trips 
+         WHERE client_id = $1 AND status = 'completed'`,
+        [clientId]
+      );
+      
+      const stats = result.rows[0];
+      return {
+        totalRides: parseInt(stats.total_rides) || 0,
+        totalDistance: parseFloat(stats.total_distance) || 0
+      };
+    } catch (error) {
+      logger.error('Error fetching client dashboard stats:', error);
+      throw error;
+    }
+  }
+
   static async getDriverTrips(driverId, limit = 20, offset = 0) {
     try {
       const result = await query(

@@ -309,4 +309,13 @@ router.get('/pricing/active', asyncHandler(async (req, res) => {
   });
 }));
 
+// Get client dashboard overview stats
+router.get('/dashboard-stats', asyncHandler(async (req, res) => {
+  const stats = await Trip.getClientDashboardStats(req.userId);
+  res.status(200).json({
+    success: true,
+    data: stats
+  });
+}));
+
 module.exports = router;
