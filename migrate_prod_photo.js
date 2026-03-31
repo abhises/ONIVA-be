@@ -1,6 +1,6 @@
+require('dotenv').config(); // 1. Load the variables from .env
 const { Client } = require('pg');
 
-const DATABASE_URL = "postgresql://neondb_owner:npg_7V8xHrzdAbmD@ep-flat-credit-aju89gir-pooler.c-3.us-east-2.aws.neon.tech/neondb?sslmode=require";
 
 async function run() {
   console.log("Connecting to Production Database (Neon)...");
