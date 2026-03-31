@@ -104,6 +104,7 @@ class Driver {
 
         if (fullName !== undefined) { userFields.push(`full_name = $${userParamCount++}`); userValues.push(fullName); }
         if (phone !== undefined) { userFields.push(`phone = $${userParamCount++}`); userValues.push(phone); }
+        if (profilePhoto !== undefined) { userFields.push(`profile_photo = $${userParamCount++}`); userValues.push(profilePhoto); }
 
         if (userFields.length > 0) {
           userFields.push(`updated_at = NOW()`);

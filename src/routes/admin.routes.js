@@ -643,7 +643,7 @@ router.get(
 
     const result = await query(
       `
-    SELECT id, phone, email, full_name, role, status, language, created_at
+    SELECT id, phone, email, full_name, role, status, language, profile_photo, created_at
     FROM users
     ${roleFilter}
     ORDER BY created_at DESC
@@ -659,11 +659,48 @@ router.get(
   }),
 );
 
+// Get specific user details along with their trips
+router.get(
+  "/users/:userId",
+  asyncHandler(async (req, res) => {
+    const userResult = await query(
+      `SELECT id, phone, email, full_name, role, status, language, profile_photo, created_at FROM users WHERE id = $1`,
+      [req.params.userId]
+    );
+
+    if (userResult.rows.length === 0) {
+      throw new AppError("User not found", 404);
+    }
+
+    const user = userResult.rows[0];
+    let recentTrips = [];
+
+    if (user.role === 'client') {
+      recentTrips = await Trip.getClientTrips(user.id, 10);
+    } else if (user.role === 'driver') {
+      recentTrips = await Trip.getDriverTrips(user.id, 10);
+    }
+
+    res.status(200).json({
+      success: true,
+      data: {
+        user,
+        recentTrips
+      }
+    });
+  })
+);
+
 // Suspend user
 router.post(
   "/users/:userId/suspend",
   asyncHandler(async (req, res) => {
     const { reason } = req.body;
+
+    const userResult = await query(`SELECT role FROM users WHERE id = $1`, [req.params.userId]);
+    if (userResult.rows.length > 0 && userResult.rows[0].role === 'admin') {
+      throw new AppError("Cannot suspend an admin user", 403);
+    }
 
     await User.updateStatus(req.params.userId, "suspended");
 

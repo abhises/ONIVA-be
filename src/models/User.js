@@ -11,7 +11,7 @@ class User {
   static async findById(userId) {
     try {
       const result = await query(
-        'SELECT id, phone, email, full_name, role, language, status, created_at, updated_at FROM users WHERE id = $1',
+        'SELECT id, phone, email, full_name, role, language, status, profile_photo, created_at, updated_at FROM users WHERE id = $1',
         [userId]
       );
       return result.rows[0] || null;
@@ -60,7 +60,7 @@ class User {
 
   static async updateProfile(userId, updates) {
     try {
-      const allowedFields = ['full_name', 'email', 'language'];
+      const allowedFields = ['full_name', 'email', 'language', 'profile_photo'];
       const setClause = [];
       const values = [];
       let paramCount = 1;

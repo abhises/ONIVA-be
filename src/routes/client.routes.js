@@ -29,12 +29,13 @@ router.get('/profile', asyncHandler(async (req, res) => {
 
 // Update client profile
 router.put('/profile', asyncHandler(async (req, res) => {
-  const { fullName, email, language } = req.body;
+  const { fullName, email, language, profilePhoto } = req.body;
   
   const updated = await User.updateProfile(req.userId, {
     full_name: fullName,
     email,
-    language
+    language,
+    profile_photo: profilePhoto
   });
 
   if (!updated) {
