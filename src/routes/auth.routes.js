@@ -63,6 +63,7 @@ router.post(
       message: "User registered successfully",
       data: {
         user: result.user,
+        token: result.token,
       },
     });
   }),
@@ -95,6 +96,7 @@ router.post(
       message: "Login successful",
       data: {
         user: result.user,
+        token: result.token,
       },
     });
   }),
