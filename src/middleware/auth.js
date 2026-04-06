@@ -78,8 +78,8 @@ const authorize = (...allowedRoles) => {
 const extractToken = (req) => {
   
   const authHeader = req.headers.authorization;
-  if (authHeader && authHeader.startsWith('Bearer ')) {
-    return authHeader.substring(7);
+  if (authHeader && authHeader.toLowerCase().startsWith('bearer ')) {
+    return authHeader.slice(7);
   }
    if (req.cookies && req.cookies.token) {
     return req.cookies.token;
