@@ -24,12 +24,14 @@ const initializeSocket = (server) => {
     // User authentication
     socket.on('auth', (data) => {
       const { userId, userRole } = data;
-      activeConnections.set(userId, socket.id);
-      socket.userId = userId;
-      socket.userRole = userRole;
-      
-      logger.debug('User authenticated in socket', { userId, socketId: socket.id });
-      socket.emit('authenticated', { success: true });
+      if (userId) {
+        activeConnections.set(String(userId), socket.id);
+        socket.userId = userId;
+        socket.userRole = userRole;
+        
+        logger.debug('User authenticated in socket', { userId, socketId: socket.id });
+        socket.emit('authenticated', { success: true });
+      }
     });
 
     // Driver location updates
@@ -133,20 +135,23 @@ const initializeSocket = (server) => {
     });
 
     // Disconnect
-    socket.on('disconnect', async () => {
+    socket.on('disconnect', () => {
       const userId = socket.userId;
       const userRole = socket.userRole;
       
-      activeConnections.delete(userId);
+      if (userId) {
+        activeConnections.delete(String(userId));
+      }
       logger.debug('Client disconnected', { socketId: socket.id, userId });
       
-      // If driver disconnects, mark them as offline in DB
+      // Removed: Do not mark driver as offline in DB on disconnect
+      // This allows the driver to stay "online" during page refreshes
+      /*
       if (userRole === 'driver' && userId) {
         try {
           await Driver.setOnlineStatus(userId, false);
           logger.info('Driver marked offline on disconnect', { userId });
           
-          // Notify any listening clients (like admins) that a driver went offline
           io.emit('driver_status_changed', {
             driverId: userId,
             isOnline: false,
@@ -156,6 +161,7 @@ const initializeSocket = (server) => {
           logger.error('Error setting driver offline on disconnect:', error);
         }
       }
+      */
     });
 
     // Error handling
@@ -175,15 +181,17 @@ const getIO = () => {
 };
 
 const notifyDriver = (driverId, event, data) => {
-  const socketId = activeConnections.get(driverId);
+  const socketId = activeConnections.get(String(driverId));
   if (socketId) {
     io.to(socketId).emit(event, data);
     logger.debug('Driver notified', { driverId, event });
+  } else {
+    logger.warn('Driver not reachable via socket', { driverId, event });
   }
 };
 
 const notifyClient = (clientId, event, data) => {
-  const socketId = activeConnections.get(clientId);
+  const socketId = activeConnections.get(String(clientId));
   if (socketId) {
     io.to(socketId).emit(event, data);
     logger.debug('Client notified', { clientId, event });
