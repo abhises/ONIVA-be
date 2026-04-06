@@ -138,7 +138,9 @@ router.post('/status', asyncHandler(async (req, res) => {
 // Get pending booking requests
 router.get('/pending-requests', asyncHandler(async (req, res) => {
   const requests = await DispatchService.getPendingRequests(req.userId);
-
+  
+  console.log(`📡 [API] Fetching pending requests for Driver: ${req.userId} | Found: ${requests.length}`);
+  
   res.status(200).json({
     success: true,
     data: requests

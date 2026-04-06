@@ -28,7 +28,7 @@ const initializeSocket = (server) => {
         activeConnections.set(String(userId), socket.id);
         socket.userId = userId;
         socket.userRole = userRole;
-        
+
         logger.debug('User authenticated in socket', { userId, socketId: socket.id });
         socket.emit('authenticated', { success: true });
       }
@@ -37,7 +37,7 @@ const initializeSocket = (server) => {
     // Driver location updates
     socket.on('location_update', (data) => {
       const { tripId, latitude, longitude, accuracy } = data;
-      
+
       // Emit to client watching this trip
       io.emit('driver_location_updated', {
         tripId,
@@ -60,7 +60,7 @@ const initializeSocket = (server) => {
         driverId: socket.userId,
         timestamp: new Date().toISOString()
       });
-      
+
       logger.info('Booking accepted via socket', { userId: socket.userId, tripId });
     });
 
@@ -73,7 +73,7 @@ const initializeSocket = (server) => {
         reason,
         timestamp: new Date().toISOString()
       });
-      
+
       logger.info('Booking rejected via socket', { userId: socket.userId, tripId });
     });
 
@@ -86,7 +86,7 @@ const initializeSocket = (server) => {
         driverId: socket.userId,
         timestamp: new Date().toISOString()
       });
-      
+
       logger.info('Trip started', { tripId, driverId: socket.userId });
     });
 
@@ -101,7 +101,7 @@ const initializeSocket = (server) => {
         actualDuration,
         timestamp: new Date().toISOString()
       });
-      
+
       logger.info('Trip completed', { tripId, finalPrice });
     });
 
@@ -114,7 +114,7 @@ const initializeSocket = (server) => {
         reason,
         timestamp: new Date().toISOString()
       });
-      
+
       logger.info('Trip cancelled', { tripId, reason });
     });
 
@@ -122,7 +122,7 @@ const initializeSocket = (server) => {
     socket.on('message', (data) => {
       const { recipientId, message } = data;
       const recipientSocketId = activeConnections.get(recipientId);
-      
+
       if (recipientSocketId) {
         io.to(recipientSocketId).emit('message_received', {
           senderId: socket.userId,
@@ -130,7 +130,7 @@ const initializeSocket = (server) => {
           timestamp: new Date().toISOString()
         });
       }
-      
+
       logger.debug('Message sent', { from: socket.userId, to: recipientId });
     });
 
@@ -138,12 +138,12 @@ const initializeSocket = (server) => {
     socket.on('disconnect', () => {
       const userId = socket.userId;
       const userRole = socket.userRole;
-      
+
       if (userId) {
         activeConnections.delete(String(userId));
       }
       logger.debug('Client disconnected', { socketId: socket.id, userId });
-      
+
       // Removed: Do not mark driver as offline in DB on disconnect
       // This allows the driver to stay "online" during page refreshes
       /*

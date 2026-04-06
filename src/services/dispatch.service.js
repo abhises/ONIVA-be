@@ -23,10 +23,9 @@ class DispatchService {
     } = tripData;
 
     try {
-      // 1. Log the start of the search
-      console.log(`🔍 [Dispatch] Searching for drivers near ${pickupLat}, ${pickupLng} (Trip: ${tripId})`);
+      console.log(`🔍 [Dispatch] Broadcast search for drivers near ${pickupLat}, ${pickupLng} (Trip: ${tripId})`);
 
-      // Get available drivers near the pickup location
+      // 1. Get online drivers near the pickup location
       const availableDrivers = await Driver.getNearestDrivers(
         pickupLng,
         pickupLat,
@@ -35,49 +34,59 @@ class DispatchService {
       );
 
       if (availableDrivers.length === 0) {
-        logger.warn("No drivers available", { tripId, region });
+        logger.warn("No drivers available for broadcast", { tripId, region });
         return {
           success: false,
           message: "No drivers available in your area",
         };
       }
 
-      console.log(`✅ [Dispatch] Found ${availableDrivers.length} drivers nearby for Trip ${tripId}`);
+      // 2. Filter to only reachable drivers on socket and limit candidates (e.g., top 10)
+      const candidates = availableDrivers.slice(0, 10);
+      let notifiedCount = 0;
 
-      // Attempt to assign to nearest driver first
-      for (
-        let i = 0;
-        i < Math.min(availableDrivers.length, MAX_ASSIGNMENT_ATTEMPTS);
-        i++
-      ) {
-        const driver = availableDrivers[i];
-        console.log(`📤 [Dispatch] Sending request to Driver ID: ${driver.user_id}`);
-        
-        const assigned = await this.sendAssignmentRequest(
-          tripId,
-          driver.user_id,
-        );
+      console.log(`✅ [Dispatch] Found ${availableDrivers.length} nearby. Notifying top ${candidates.length} candidate(s) for Trip ${tripId}`);
 
-        if (assigned) {
-          return {
-            success: true,
-            message: "Driver assigned successfully",
-            driverId: driver.user_id,
-            driverName: driver.full_name,
-            driverRating: driver.rating,
-            distance: driver.distance,
-          };
+      // 3. Create requests and notify ALL candidates simultaneously
+      await Promise.all(candidates.map(async (driver) => {
+        try {
+          // Create the booking request record
+          const result = await query(
+            `INSERT INTO booking_requests (trip_id, driver_id, status, expires_at, created_at)
+             VALUES ($1, $2, 'pending', (CURRENT_TIMESTAMP AT TIME ZONE 'UTC') + INTERVAL '10 minutes', (CURRENT_TIMESTAMP AT TIME ZONE 'UTC'))
+             RETURNING *`,
+            [tripId, driver.user_id],
+          );
+
+          const request = result.rows[0];
+
+          // Notify the driver via socket
+          const notified = notifyDriver(driver.user_id, 'new_booking_request', {
+            requestId: request.id,
+            tripId: tripId,
+            expiresAt: request.expires_at
+          });
+
+          if (notified) notifiedCount++;
+        } catch (err) {
+          logger.error("Failed to notify candidate driver:", { driverId: driver.user_id, err });
         }
+      }));
+
+      if (notifiedCount === 0) {
+        return {
+          success: false,
+          message: "No reachable drivers found.",
+        };
       }
 
-      // If no driver accepted within timeout
-      logger.warn("No driver accepted assignment", { tripId });
       return {
-        success: false,
-        message: "Unable to find available driver. Please try again.",
+        success: true,
+        message: `Broadcasted to ${notifiedCount} driver(s)`,
+        notifiedCount
       };
     } catch (error) {
-      logger.error("Error in dispatch service:", error);
+      logger.error("Error in broadcast dispatch service:", error);
       throw error;
     }
   }
@@ -93,7 +102,7 @@ class DispatchService {
       );
 
       const request = result.rows[0];
-      
+
       logger.debug("Booking request sent", {
         tripId,
         driverId,
@@ -166,8 +175,31 @@ class DispatchService {
     });
   }
 
- static async acceptBooking(requestId, driverId) {
+   static async acceptBooking(requestId, driverId) {
     try {
+      // 1. First, check if the trip is still available (status = 'pending')
+      // and assign the driver in one atomic step to prevent race conditions
+      const tripUpdate = await query(
+        `UPDATE trips 
+         SET driver_id = $1, status = 'accepted', updated_at = (CURRENT_TIMESTAMP AT TIME ZONE 'UTC') 
+         WHERE id = (SELECT trip_id FROM booking_requests WHERE id = $2)
+         AND status = 'pending'
+         RETURNING id`,
+        [driverId, requestId]
+      );
+
+      if (tripUpdate.rows.length === 0) {
+        // Trip is no longer available (already accepted by someone else or cancelled)
+        await query(
+          "UPDATE booking_requests SET status = 'expired' WHERE id = $1",
+          [requestId]
+        );
+        throw new Error("Trip is no longer available.");
+      }
+
+      const tripId = tripUpdate.rows[0].id;
+
+      // 2. Mark this specific request as accepted
       const result = await query(
         `UPDATE booking_requests 
          SET status = $1, accepted_at = (CURRENT_TIMESTAMP AT TIME ZONE 'UTC')
@@ -176,24 +208,22 @@ class DispatchService {
         ["accepted", requestId, driverId],
       );
 
-      if (result.rows.length === 0) {
-        throw new Error("Booking request not found or invalid driver");
-      }
-
       const request = result.rows[0];
 
-      // 🟢 CHANGE THIS: Change 'assigned' to 'accepted' 
-      // to match your database check constraint
+      // 3. Mark ALL OTHER pending requests for this trip as expired/invalid
       await query(
-        "UPDATE trips SET driver_id = $1, status = $2, updated_at = (CURRENT_TIMESTAMP AT TIME ZONE 'UTC') WHERE id = $3",
-        [driverId, "accepted", request.trip_id], 
+        `UPDATE booking_requests 
+         SET status = 'expired' 
+         WHERE trip_id = $1 AND id != $2 AND status = 'pending'`,
+        [tripId, requestId]
       );
 
-      logger.info("Booking accepted", {
+      logger.info("Booking accepted in broadcast mode", {
         requestId,
         driverId,
-        tripId: request.trip_id,
+        tripId
       });
+
       return request;
     } catch (error) {
       logger.error("Error accepting booking:", error);
@@ -245,10 +275,10 @@ class DispatchService {
     }
   }
 
- static async getRequestById(requestId, driverId) {
-  try {
-    const result = await query(
-      `SELECT 
+  static async getRequestById(requestId, driverId) {
+    try {
+      const result = await query(
+        `SELECT 
           br.id as request_id, 
           br.status as request_status, 
           br.expires_at,
@@ -267,14 +297,14 @@ class DispatchService {
        JOIN trips t ON br.trip_id = t.id
        JOIN users u ON t.client_id = u.id
        WHERE br.id = $1 AND br.driver_id = $2`,
-      [requestId, driverId]
-    );
-    return result.rows[0];
-  } catch (error) {
-    logger.error("Error fetching request details:", error);
-    throw error;
+        [requestId, driverId]
+      );
+      return result.rows[0];
+    } catch (error) {
+      logger.error("Error fetching request details:", error);
+      throw error;
+    }
   }
-}
 }
 
 module.exports = DispatchService;
