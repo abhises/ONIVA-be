@@ -88,6 +88,18 @@ router.post('/location', asyncHandler(async (req, res) => {
   }
 
   const updated = await Driver.updateLocation(req.userId, latitude, longitude);
+  
+  // Real-time broadcast for admin and active trip tracking
+  try {
+    socketService.getIO().emit('driver_location_updated', {
+      driverId: req.userId,
+      latitude,
+      longitude,
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    logger.error('Error broadcasting location update:', error.message);
+  }
 
   res.status(200).json({
     success: true,
@@ -104,6 +116,17 @@ router.post('/status', asyncHandler(async (req, res) => {
   }
 
   const updated = await Driver.setOnlineStatus(req.userId, isOnline);
+
+  // Broadcast status change
+  try {
+    socketService.getIO().emit('driver_status_changed', {
+      driverId: req.userId,
+      isOnline,
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    logger.error('Error broadcasting status update:', error.message);
+  }
 
   res.status(200).json({
     success: true,

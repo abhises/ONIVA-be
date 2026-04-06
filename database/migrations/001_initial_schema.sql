@@ -1,14 +1,7 @@
--- ONIVA Database Master Schema
--- Latest State as of 2026-03-31
+-- ONIVA Database Schema
+-- PostgreSQL
 
--- 1. Migration Tracking Table
-CREATE TABLE IF NOT EXISTS migrations_log (
-  id SERIAL PRIMARY KEY,
-  migration_name VARCHAR(255) UNIQUE NOT NULL,
-  applied_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
-
--- 2. Users Table
+-- Users Table
 CREATE TABLE users (
   id SERIAL PRIMARY KEY,
   phone VARCHAR(20) UNIQUE NOT NULL,
@@ -18,9 +11,6 @@ CREATE TABLE users (
   role VARCHAR(50) NOT NULL CHECK (role IN ('client', 'driver', 'admin')),
   language VARCHAR(10) DEFAULT 'en',
   status VARCHAR(50) DEFAULT 'active' CHECK (status IN ('active', 'inactive', 'suspended')),
-  profile_photo TEXT,
-  reset_otp VARCHAR(6),
-  reset_otp_expires_at TIMESTAMP,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
@@ -29,14 +19,12 @@ CREATE INDEX idx_users_phone ON users(phone);
 CREATE INDEX idx_users_role ON users(role);
 CREATE INDEX idx_users_status ON users(status);
 
--- 3. Drivers Table
+-- Drivers Table
 CREATE TABLE drivers (
   id SERIAL PRIMARY KEY,
   user_id INTEGER UNIQUE NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-  national_id TEXT NOT NULL,
-  driving_license TEXT NOT NULL,
-  national_id_url TEXT,
-  driving_license_url TEXT,
+  national_id VARCHAR(50) NOT NULL,
+  driving_license VARCHAR(50) NOT NULL,
   license_expiry DATE NOT NULL,
   profile_photo TEXT,
   region VARCHAR(100) NOT NULL,
@@ -58,7 +46,7 @@ CREATE INDEX idx_drivers_region ON drivers(region);
 CREATE INDEX idx_drivers_is_online ON drivers(is_online);
 CREATE INDEX idx_drivers_location ON drivers(current_latitude, current_longitude);
 
--- 4. Trips Table
+-- Trips Table
 CREATE TABLE trips (
   id SERIAL PRIMARY KEY,
   client_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -98,7 +86,7 @@ CREATE INDEX idx_trips_status ON trips(status);
 CREATE INDEX idx_trips_region ON trips(region);
 CREATE INDEX idx_trips_created ON trips(created_at);
 
--- 5. Booking Requests Table
+-- Booking Requests Table
 CREATE TABLE booking_requests (
   id SERIAL PRIMARY KEY,
   trip_id INTEGER NOT NULL REFERENCES trips(id) ON DELETE CASCADE,
@@ -115,7 +103,7 @@ CREATE INDEX idx_booking_requests_trip ON booking_requests(trip_id);
 CREATE INDEX idx_booking_requests_driver ON booking_requests(driver_id);
 CREATE INDEX idx_booking_requests_status ON booking_requests(status);
 
--- 6. Trip Ratings Table
+-- Trip Ratings Table
 CREATE TABLE trip_ratings (
   id SERIAL PRIMARY KEY,
   trip_id INTEGER NOT NULL REFERENCES trips(id) ON DELETE CASCADE,
@@ -129,7 +117,7 @@ CREATE TABLE trip_ratings (
 CREATE INDEX idx_trip_ratings_trip ON trip_ratings(trip_id);
 CREATE INDEX idx_trip_ratings_rater ON trip_ratings(rater_id);
 
--- 7. Trip Reports Table
+-- Trip Reports Table
 CREATE TABLE trip_reports (
   id SERIAL PRIMARY KEY,
   trip_id INTEGER NOT NULL REFERENCES trips(id) ON DELETE CASCADE,
@@ -145,7 +133,7 @@ CREATE TABLE trip_reports (
 CREATE INDEX idx_trip_reports_trip ON trip_reports(trip_id);
 CREATE INDEX idx_trip_reports_status ON trip_reports(status);
 
--- 8. Driver Suspensions Table
+-- Driver Suspensions Table
 CREATE TABLE driver_suspensions (
   id SERIAL PRIMARY KEY,
   driver_id INTEGER NOT NULL REFERENCES drivers(user_id) ON DELETE CASCADE,
@@ -158,7 +146,7 @@ CREATE TABLE driver_suspensions (
 
 CREATE INDEX idx_driver_suspensions_driver ON driver_suspensions(driver_id);
 
--- 9. Pricing Configuration Table
+-- Pricing Configuration Table
 CREATE TABLE pricing_config (
   id SERIAL PRIMARY KEY,
   commission_percentage DECIMAL(5,2) DEFAULT 25,
@@ -176,7 +164,7 @@ CREATE TABLE pricing_config (
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
--- 10. Activity Logs Table
+-- Activity Logs Table
 CREATE TABLE activity_logs (
   id SERIAL PRIMARY KEY,
   user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
@@ -191,7 +179,7 @@ CREATE TABLE activity_logs (
 CREATE INDEX idx_activity_logs_user ON activity_logs(user_id);
 CREATE INDEX idx_activity_logs_created ON activity_logs(created_at);
 
--- Utils: updated_at triggers
+-- Create function for updating updated_at timestamp
 CREATE OR REPLACE FUNCTION update_updated_at_column()
 RETURNS TRIGGER AS $$
 BEGIN
@@ -200,6 +188,7 @@ BEGIN
 END;
 $$ language 'plpgsql';
 
+-- Create triggers for updated_at
 CREATE TRIGGER update_users_updated_at BEFORE UPDATE ON users
   FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 

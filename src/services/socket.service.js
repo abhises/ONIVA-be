@@ -5,6 +5,7 @@
 
 const socketIO = require('socket.io');
 const logger = require('../utils/logger');
+const Driver = require('../models/Driver');
 
 let io;
 const activeConnections = new Map(); // userId -> socketId
@@ -132,9 +133,29 @@ const initializeSocket = (server) => {
     });
 
     // Disconnect
-    socket.on('disconnect', () => {
-      activeConnections.delete(socket.userId);
-      logger.debug('Client disconnected', { socketId: socket.id, userId: socket.userId });
+    socket.on('disconnect', async () => {
+      const userId = socket.userId;
+      const userRole = socket.userRole;
+      
+      activeConnections.delete(userId);
+      logger.debug('Client disconnected', { socketId: socket.id, userId });
+      
+      // If driver disconnects, mark them as offline in DB
+      if (userRole === 'driver' && userId) {
+        try {
+          await Driver.setOnlineStatus(userId, false);
+          logger.info('Driver marked offline on disconnect', { userId });
+          
+          // Notify any listening clients (like admins) that a driver went offline
+          io.emit('driver_status_changed', {
+            driverId: userId,
+            isOnline: false,
+            timestamp: new Date().toISOString()
+          });
+        } catch (error) {
+          logger.error('Error setting driver offline on disconnect:', error);
+        }
+      }
     });
 
     // Error handling

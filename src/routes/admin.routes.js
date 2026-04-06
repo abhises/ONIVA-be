@@ -779,6 +779,8 @@ router.get(
             'name', u_d.full_name, 
             'phone', u_d.phone, 
             'isOnline', d.is_online,
+            'profilePhoto', d.profile_photo,
+            'car', d.vehicle_info,
             'location', json_build_object('latitude', d.current_latitude, 'longitude', d.current_longitude)
           )
         ELSE NULL END as driver
