@@ -71,7 +71,32 @@ router.get(
         -- active trips
         (SELECT COUNT(*) 
          FROM trips 
-         WHERE status IN ('pending', 'accepted', 'waiting_for_pickup', 'in_progress')) AS active_trips
+         WHERE status IN ('pending', 'accepted', 'waiting_for_pickup', 'in_progress')) AS active_trips,
+
+        -- new users this week
+        (SELECT COUNT(*) 
+         FROM users 
+         WHERE role != 'admin' AND created_at >= date_trunc('week', CURRENT_DATE)) AS new_users_this_week,
+
+        -- new drivers this week
+        (SELECT COUNT(*) 
+         FROM users 
+         WHERE role = 'driver' AND created_at >= date_trunc('week', CURRENT_DATE)) AS new_drivers_this_week,
+
+        -- trips this week
+        (SELECT COUNT(*) 
+         FROM trips 
+         WHERE created_at >= date_trunc('week', CURRENT_DATE)) AS trips_this_week,
+
+        -- revenue this month
+        (SELECT COALESCE(SUM(total_price), 0) 
+         FROM trips 
+         WHERE status = 'completed' AND created_at >= date_trunc('month', CURRENT_DATE)) AS revenue_this_month,
+
+        -- revenue last month
+        (SELECT COALESCE(SUM(total_price), 0) 
+         FROM trips 
+         WHERE status = 'completed' AND created_at >= date_trunc('month', CURRENT_DATE - INTERVAL '1 month') AND created_at < date_trunc('month', CURRENT_DATE)) AS revenue_last_month
     `);
 
     res.status(200).json({
@@ -712,6 +737,28 @@ router.post(
     res.status(200).json({
       success: true,
       message: "User suspended successfully",
+    });
+  }),
+);
+
+// Unsuspend user
+router.post(
+  "/users/:userId/unsuspend",
+  asyncHandler(async (req, res) => {
+    const userResult = await query(`SELECT role FROM users WHERE id = $1`, [req.params.userId]);
+    if (userResult.rows.length === 0) {
+      throw new AppError("User not found", 404);
+    }
+
+    await User.updateStatus(req.params.userId, "active");
+
+    logger.info("User unsuspended by admin", {
+      userId: req.params.userId,
+    });
+
+    res.status(200).json({
+      success: true,
+      message: "User unsuspended successfully",
     });
   }),
 );

@@ -79,8 +79,15 @@ class AuthService {
       }
 
       // Check user status
-      if (user.status !== 'active') {
-        throw new Error('User account is inactive');
+      if (user.status === 'suspended') {
+        const error = new Error('User account is suspended');
+        error.statusCode = 403;
+        error.code = 'ACCOUNT_SUSPENDED';
+        throw error;
+      } else if (user.status !== 'active') {
+        const error = new Error('User account is inactive');
+        error.statusCode = 403;
+        throw error;
       }
 
       // Generate token
