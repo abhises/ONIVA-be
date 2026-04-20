@@ -745,6 +745,14 @@ router.get(
     const s = summaryResult.rows[0];
     const total = parseInt(countResult.rows[0].total) || 0;
 
+    // Fetch current active commission percentage
+    const pricingResult = await query(
+      `SELECT commission_percentage FROM pricing_config WHERE is_active = true LIMIT 1`
+    );
+    const activeCommission = pricingResult.rows.length > 0 
+      ? parseFloat(pricingResult.rows[0].commission_percentage) 
+      : 25; // fallback
+
     res.status(200).json({
       success: true,
       data: result.rows,
@@ -753,6 +761,7 @@ router.get(
         totalCommission: parseFloat(s.total_commission) || 0,
         totalDriverEarnings: parseFloat(s.total_driver_earnings) || 0,
         count: parseInt(s.count) || 0,
+        activeCommission: activeCommission
       },
       pagination: { total, limit, offset, hasMore: offset + limit < total }
     });
