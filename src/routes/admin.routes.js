@@ -628,15 +628,20 @@ router.get(
     const totalPlatformEarnings = parseFloat(s.total_platform_earnings) || 0;
     const totalCommission = parseFloat(s.total_commission) || 0;
     
-    // Calculate effective commission rate, default to 25 if no trips
-    const commissionPercentage = totalPlatformEarnings > 0 ? Math.round((totalCommission / totalPlatformEarnings) * 100) : 25;
+    // Fetch active commission rate
+    const activePricingResult = await query(`SELECT commission_percentage FROM pricing_config WHERE is_active = true LIMIT 1`);
+    const activeCommission = activePricingResult.rows.length > 0 ? parseFloat(activePricingResult.rows[0].commission_percentage) : 25;
+
+    // Effective Historical Commission is the blended fraction, while the displayed rate should be active
+    const effectiveCommission = totalPlatformEarnings > 0 ? Math.round((totalCommission / totalPlatformEarnings) * 1000) / 10 : activeCommission;
 
     const data = {
       totalTrips: parseInt(s.total_trips) || 0,
       totalPlatformEarnings: totalPlatformEarnings,
       totalDriverEarnings: parseFloat(s.total_driver_earnings) || 0,
       totalCommission: totalCommission,
-      commissionPercentage: commissionPercentage,
+      commissionPercentage: activeCommission, // Use current policy instead of historical blend
+      historicalAverageCommission: effectiveCommission,
       averageCommissionPerTrip: Math.round(parseFloat(s.average_commission_per_trip)) || 0,
       monthlyData: monthlyResult.rows.map(row => ({
         month: row.month.trim(),
@@ -654,6 +659,107 @@ router.get(
 );
 
 // User management
+// Admin Transactions — full financial ledger of all trips
+router.get(
+  "/transactions",
+  asyncHandler(async (req, res) => {
+    const {
+      startDate,
+      endDate,
+      driverId,
+      clientId,
+      status = 'all',
+      search
+    } = req.query;
+    const limit = req.query.limit ? parseInt(req.query.limit) : 50;
+    const offset = req.query.offset ? parseInt(req.query.offset) : 0;
+
+    const params = [];
+    const whereClauses = [];
+
+    if (status !== 'all') {
+      params.push(status);
+      whereClauses.push(`t.status = $${params.length}`);
+    }
+    if (startDate) {
+      params.push(startDate);
+      whereClauses.push(`t.created_at::date >= $${params.length}`);
+    }
+    if (endDate) {
+      params.push(endDate);
+      whereClauses.push(`t.created_at::date <= $${params.length}`);
+    }
+    if (driverId) {
+      params.push(driverId);
+      whereClauses.push(`t.driver_id = $${params.length}`);
+    }
+    if (clientId) {
+      params.push(clientId);
+      whereClauses.push(`t.client_id = $${params.length}`);
+    }
+    if (search) {
+      params.push(`%${search}%`);
+      const idx = params.length;
+      whereClauses.push(`(uc.full_name ILIKE $${idx} OR ud.full_name ILIKE $${idx} OR t.pickup_address ILIKE $${idx})`);
+    }
+
+    const whereStr = whereClauses.length > 0 ? `WHERE ${whereClauses.join(' AND ')}` : '';
+
+    const baseQuery = `FROM trips t
+       LEFT JOIN users uc ON t.client_id = uc.id
+       LEFT JOIN users ud ON t.driver_id = ud.id
+       ${whereStr}`;
+
+    const countResult = await query(`SELECT COUNT(*) as total ${baseQuery}`, params);
+
+    // Summary (same filter, no pagination)
+    const summaryResult = await query(
+      `SELECT
+        COALESCE(SUM(t.total_price), 0) as total_revenue,
+        COALESCE(SUM(t.platform_commission), 0) as total_commission,
+        COALESCE(SUM(t.driver_earnings), 0) as total_driver_earnings,
+        COUNT(*) as count
+       ${baseQuery}`,
+      params
+    );
+
+    params.push(limit, offset);
+    const result = await query(
+      `SELECT
+        t.id, t.status, t.booking_type,
+        t.pickup_address, t.destination_address,
+        t.estimated_distance, t.actual_distance,
+        t.estimated_duration, t.actual_duration,
+        t.base_price, t.total_price, t.final_price,
+        t.platform_commission, t.driver_earnings,
+        t.payment_method, t.region,
+        t.created_at, t.completed_at,
+        t.client_id, uc.full_name as client_name, uc.phone as client_phone,
+        t.driver_id, ud.full_name as driver_name, ud.phone as driver_phone
+       ${baseQuery}
+       ORDER BY t.created_at DESC
+       LIMIT $${params.length - 1} OFFSET $${params.length}`,
+      params
+    );
+
+    const s = summaryResult.rows[0];
+    const total = parseInt(countResult.rows[0].total) || 0;
+
+    res.status(200).json({
+      success: true,
+      data: result.rows,
+      summary: {
+        totalRevenue: parseFloat(s.total_revenue) || 0,
+        totalCommission: parseFloat(s.total_commission) || 0,
+        totalDriverEarnings: parseFloat(s.total_driver_earnings) || 0,
+        count: parseInt(s.count) || 0,
+      },
+      pagination: { total, limit, offset, hasMore: offset + limit < total }
+    });
+  }),
+);
+
+
 router.get(
   "/users",
   asyncHandler(async (req, res) => {

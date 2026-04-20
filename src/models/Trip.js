@@ -156,24 +156,40 @@ class Trip {
   static async completeTrip(tripId, actualDistance, actualDuration, finalPrice) {
     return transaction(async (client) => {
       try {
+        // 1. Fetch active pricing config to get current commission rate
+        const pricingResult = await client.query(
+          `SELECT commission_percentage FROM pricing_config WHERE is_active = true LIMIT 1`
+        );
+        const commissionPct = pricingResult.rows.length > 0
+          ? parseFloat(pricingResult.rows[0].commission_percentage)
+          : 25; // fallback default
+
+        // 2. Calculate earnings split based on final price + active config
+        const platformCommission = Math.round((finalPrice * commissionPct) / 100);
+        const driverEarnings = Math.round(finalPrice - platformCommission);
+
+        // 3. Update trip with final values — commission is recalculated at completion time
         const result = await client.query(
           `UPDATE trips SET 
             status = 'completed',
             actual_distance = $1,
             actual_duration = $2,
             final_price = $3,
+            total_price = $3,
+            platform_commission = $4,
+            driver_earnings = $5,
             completed_at = NOW(),
             updated_at = NOW()
-           WHERE id = $4
+           WHERE id = $6
            RETURNING *`,
-          [actualDistance, actualDuration, finalPrice, tripId]
+          [actualDistance, actualDuration, finalPrice, platformCommission, driverEarnings, tripId]
         );
 
         if (result.rows.length === 0) {
           throw new Error('Trip not found');
         }
 
-        logger.info('Trip completed', { tripId, finalPrice });
+        logger.info('Trip completed', { tripId, finalPrice, platformCommission, driverEarnings, commissionPct });
         return result.rows[0];
       } catch (error) {
         logger.error('Error completing trip:', error);
