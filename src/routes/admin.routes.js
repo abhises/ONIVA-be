@@ -742,8 +742,8 @@ router.get(
       params
     );
 
-    const s = summaryResult.rows[0];
-    const total = parseInt(countResult.rows[0].total) || 0;
+    const s = summaryResult.rows[0] || { total_revenue: 0, total_commission: 0, total_driver_earnings: 0, count: 0 };
+    const total = (countResult.rows[0] && parseInt(countResult.rows[0].total)) || 0;
 
     // Fetch current active commission percentage
     const pricingResult = await query(
@@ -783,10 +783,14 @@ router.get(
 
     const result = await query(
       `
-    SELECT id, phone, email, full_name, role, status, language, profile_photo, created_at
-    FROM users
-    ${roleFilter}
-    ORDER BY created_at DESC
+    SELECT 
+      u.id, u.phone, u.email, u.full_name, u.role, u.status, u.language, 
+      COALESCE(u.profile_photo, d.profile_photo) as profile_photo, 
+      u.created_at
+    FROM users u
+    LEFT JOIN drivers d ON u.id = d.user_id
+    ${roleFilter.replace('WHERE role', 'WHERE u.role')}
+    ORDER BY u.created_at DESC
     LIMIT $1 OFFSET $2
   `,
       [limit, offset],
@@ -804,7 +808,15 @@ router.get(
   "/users/:userId",
   asyncHandler(async (req, res) => {
     const userResult = await query(
-      `SELECT id, phone, email, full_name, role, status, language, profile_photo, created_at FROM users WHERE id = $1`,
+      `
+      SELECT 
+        u.id, u.phone, u.email, u.full_name, u.role, u.status, u.language, 
+        COALESCE(u.profile_photo, d.profile_photo) as profile_photo, 
+        u.created_at 
+      FROM users u
+      LEFT JOIN drivers d ON u.id = d.user_id
+      WHERE u.id = $1
+      `,
       [req.params.userId]
     );
 
