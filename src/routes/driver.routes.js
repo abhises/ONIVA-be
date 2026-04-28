@@ -154,6 +154,18 @@ router.post('/requests/:requestId/accept', asyncHandler(async (req, res) => {
     req.userId
   );
 
+  // 🟢 FIRE THE SOCKET EVENT 🟢
+  try {
+    socketService.getIO().emit('trip_status_changed', {
+      tripId: request.trip_id,
+      status: 'accepted',
+      driverId: req.userId,
+      timestamp: new Date().toISOString()
+    });
+  } catch (err) {
+    console.error("Socket emit failed:", err);
+  }
+
   res.status(200).json({
     success: true,
     message: 'Booking accepted',

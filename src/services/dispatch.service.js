@@ -288,6 +288,10 @@ class DispatchService {
           t.total_price,
           t.estimated_distance,
           t.estimated_duration,
+          t.pickup_latitude,
+          t.pickup_longitude,
+          t.destination_latitude,
+          t.destination_longitude,
           u.full_name as client_name,
           u.phone as client_phone, -- Fixed: changed u.phone_number to u.phone
           u.id as client_id,
