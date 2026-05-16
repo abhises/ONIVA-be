@@ -77,6 +77,36 @@ app.use('/api/trips', authenticate, tripRoutes);
 app.use('/api/location', authenticate, locationRoutes);
 app.use('/api/admin', authenticate, adminRoutes); // Admin routes should have role check
 
+// Keep-alive endpoint for Hugging Face Spaces (Proxied via Backend)
+app.get('/api/keepalive', async (req, res) => {
+  try {
+    const timestamp = Date.now();
+    const services = [
+      { name: 'Geocoding', url: process.env.GEOCODING_URL || 'https://abhises-oniva-osm-search.hf.space/search?q=Dakar&format=json&limit=1' },
+      { name: 'MapTiles', url: process.env.MAP_TILE_URL || 'https://abhises-oniva-map-tiles.hf.space/tile/0/0/0.png' },
+      { name: 'OSRM', url: process.env.OSRM_URL || 'https://abhises-osrm-server.hf.space/route/v1/driving/-17.46,14.71;-17.45,14.72' }
+    ];
+
+    const results = await Promise.allSettled(
+      services.map(s => fetch(`${s.url}${s.url.includes('?') ? '&' : '?'}t=${timestamp}`, { 
+        method: 'GET', 
+        timeout: 10000 
+      }))
+    );
+
+    res.status(200).json({
+      success: true,
+      message: 'Keep-alive pings sent to Hugging Face',
+      details: results.map((r, i) => ({
+        service: services[i].name,
+        status: r.status === 'fulfilled' ? 'Sent' : 'Error'
+      }))
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
 // 404 Handler
 app.use((req, res) => {
   res.status(404).json({

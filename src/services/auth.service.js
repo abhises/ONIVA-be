@@ -69,13 +69,17 @@ class AuthService {
       // Find user by phone
       const user = await User.findByPhone(phone);
       if (!user) {
-        throw new Error('Invalid phone number or password');
+        const error = new Error('Invalid phone number or password');
+        error.statusCode = 401;
+        throw error;
       }
 
       // Verify password
       const isPasswordValid = await User.verifyPassword(user.id, password);
       if (!isPasswordValid) {
-        throw new Error('Invalid phone number or password');
+        const error = new Error('Invalid phone number or password');
+        error.statusCode = 401;
+        throw error;
       }
 
       // Check user status

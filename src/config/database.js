@@ -9,28 +9,25 @@ const logger = require('../utils/logger');
 
 let pool;
 
-switch (process.env.NODE_ENV) {
-  case 'production':
-    console.log('🔗 Connecting to Production (Neon DB)...');
-    pool = new Pool({
-      connectionString: process.env.DATABASE_URL,
-      ssl: {
-        rejectUnauthorized: false // Required for Neon
-      }
-    });
-    break;
-
-  case 'development':
-  default:
-    console.log('🔗 Connecting to Local Development Database...');
-    pool = new Pool({
-      host: process.env.DB_HOST,
-      port: process.env.DB_PORT,
-      user: process.env.DB_USER,
-      password: process.env.DB_PASSWORD,
-      database: process.env.DB_NAME,
-    });
-    break;
+// Initialize pool based on available configuration
+if (process.env.DATABASE_URL) {
+  const isNeon = process.env.DATABASE_URL.includes('neon.tech');
+  console.log(`🔗 Connecting to ${isNeon ? 'Neon DB' : 'remote database'} via DATABASE_URL...`);
+  pool = new Pool({
+    connectionString: process.env.DATABASE_URL,
+    ssl: isNeon || process.env.NODE_ENV === 'production' ? {
+      rejectUnauthorized: false // Required for Neon and typical production DBs
+    } : false
+  });
+} else {
+  console.log('🔗 Connecting to Local Development Database...');
+  pool = new Pool({
+    host: process.env.DB_HOST || 'localhost',
+    port: process.env.DB_PORT || 5432,
+    user: process.env.DB_USER || 'postgres',
+    password: process.env.DB_PASSWORD || 'postgres',
+    database: process.env.DB_NAME || 'oniva_db',
+  });
 }
 
 
