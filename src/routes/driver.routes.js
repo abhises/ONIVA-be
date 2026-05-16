@@ -27,6 +27,30 @@ router.post('/profile', asyncHandler(async (req, res) => {
     vehicleInfo
   } = req.body;
 
+  // Check if driver profile already exists
+  const existingDriver = await Driver.findById(req.userId);
+  
+  if (existingDriver) {
+    // If they already exist, we update their info instead of erroring.
+    // This prevents the "duplicate key" error and allows re-submission.
+    await Driver.updateProfile(req.userId, {
+      nationalId,
+      drivingLicense,
+      nationalIdUrl,
+      drivingLicenseUrl,
+      licenseExpiry,
+      profilePhoto,
+      region,
+      vehicleInfo,
+      verification_status: 'pending' // Reset status to pending upon re-submission
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: 'Driver profile updated. Pending verification.',
+    });
+  }
+
   // Validate that we have the numbers AND the document links
   if (!nationalId || !drivingLicense || !nationalIdUrl || !drivingLicenseUrl || !region || !vehicleInfo) {
     throw new AppError('Missing required fields or document uploads', 400);

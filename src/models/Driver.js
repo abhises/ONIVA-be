@@ -88,6 +88,7 @@ class Driver {
         if (profilePhoto !== undefined) { driverFields.push(`profile_photo = $${paramCount++}`); driverValues.push(profilePhoto); }
         if (region !== undefined) { driverFields.push(`region = $${paramCount++}`); driverValues.push(region); }
         if (vehicleInfo !== undefined) { driverFields.push(`vehicle_info = $${paramCount++}`); driverValues.push(JSON.stringify(vehicleInfo)); }
+        if (updates.verification_status !== undefined) { driverFields.push(`verification_status = $${paramCount++}`); driverValues.push(updates.verification_status); }
 
         if (driverFields.length > 0) {
           driverFields.push(`updated_at = NOW()`);
