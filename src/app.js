@@ -88,10 +88,17 @@ app.get('/api/keepalive', async (req, res) => {
     ];
 
     const results = await Promise.allSettled(
-      services.map(s => fetch(`${s.url}${s.url.includes('?') ? '&' : '?'}t=${timestamp}`, { 
-        method: 'GET', 
-        timeout: 10000 
-      }))
+      services.map(s => {
+        // OSRM strictly rejects unknown query parameters with HTTP 400, so we skip adding 't'
+        const finalUrl = s.name === 'OSRM'
+          ? s.url
+          : `${s.url}${s.url.includes('?') ? '&' : '?'}t=${timestamp}`;
+
+        return fetch(finalUrl, { 
+          method: 'GET', 
+          signal: AbortSignal.timeout(10000) 
+        });
+      })
     );
 
     res.status(200).json({
@@ -99,13 +106,15 @@ app.get('/api/keepalive', async (req, res) => {
       message: 'Keep-alive pings sent to Hugging Face',
       details: results.map((r, i) => ({
         service: services[i].name,
-        status: r.status === 'fulfilled' ? 'Sent' : 'Error'
+        status: r.status === 'fulfilled' ? 'Sent' : 'Error',
+        error: r.status === 'rejected' ? r.reason?.message : undefined
       }))
     });
   } catch (error) {
     res.status(500).json({ success: false, error: error.message });
   }
 });
+
 
 // 404 Handler
 app.use((req, res) => {
